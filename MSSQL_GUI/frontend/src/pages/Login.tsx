@@ -16,11 +16,15 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import api from "@/lib/api";
+import axios from "axios";
 
 const loginSchema = z.object({
   email: z.string().email("Email non valida"),
   password: z.string().min(1, "Password obbligatoria"),
-  totp_code: z.string().optional(),
+  totp_code: z
+    .string()
+    .optional()
+    .refine((val) => !val || /^\d{6}$/.test(val), "Il codice deve essere di 6 cifre numeriche"),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
@@ -35,6 +39,7 @@ export default function Login() {
   const {
     register,
     handleSubmit,
+    reset,
     formState: { errors },
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -42,18 +47,31 @@ export default function Login() {
 
   const mutation = useMutation({
     mutationFn: (data: LoginForm) => api.post("/auth/login", data),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
       setErrorMsg(null);
       if (res.data?.require_2fa) {
         setRequires2FA(true);
         return;
       }
-      queryClient.invalidateQueries({ queryKey: ["me"] });
+      await queryClient.invalidateQueries({ queryKey: ["me"] });
       navigate("/");
     },
     onError: (err: unknown) => {
-      const axiosErr = err as { response?: { data?: { detail?: string } } };
-      setErrorMsg(axiosErr.response?.data?.detail ?? "Credenziali non valide");
+      if (axios.isAxiosError(err)) {
+        const status = err.response?.status;
+        const detail = err.response?.data?.detail as string | undefined;
+        if (status === 401) {
+          setErrorMsg(detail ?? "Credenziali non valide");
+        } else if (status === 429) {
+          setErrorMsg("Troppi tentativi. Riprova tra qualche minuto.");
+        } else if (!err.response) {
+          setErrorMsg("Impossibile connettersi al server.");
+        } else {
+          setErrorMsg(detail ?? "Errore durante il login.");
+        }
+      } else {
+        setErrorMsg("Errore imprevisto. Riprova.");
+      }
     },
   });
 
@@ -125,7 +143,6 @@ export default function Login() {
                         type="button"
                         onClick={() => setShowPassword((v) => !v)}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors"
-                        tabIndex={-1}
                         aria-label={showPassword ? "Nascondi password" : "Mostra password"}
                       >
                         {showPassword ? (
@@ -192,7 +209,11 @@ export default function Login() {
               {requires2FA && (
                 <button
                   type="button"
-                  onClick={() => setRequires2FA(false)}
+                  onClick={() => {
+                    setRequires2FA(false);
+                    setErrorMsg(null);
+                    reset();
+                  }}
                   className="w-full text-center text-sm text-slate-400 hover:text-slate-200 transition-colors mt-1"
                 >
                   ← Torna al login
@@ -203,7 +224,7 @@ export default function Login() {
         </Card>
 
         <p className="text-center text-slate-500 text-xs mt-6">
-          © 2025 EDM Informatica — DBShield v1.0
+          © 2026 EDM Informatica — DBShield v1.0
         </p>
       </div>
     </div>
