@@ -15,3 +15,11 @@ class TokenResponse(BaseModel):
 class Require2FAResponse(BaseModel):
     require_2fa: bool = True
     message: str = "2FA code required"
+
+
+class TwoFAVerifyRequest(BaseModel):
+    code: str
+
+
+class TwoFADisableRequest(BaseModel):
+    password: str

@@ -33,5 +33,6 @@ class User(Base, TimestampMixin):
     two_fa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     two_fa_secret_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     two_fa_backup_codes_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pending_two_fa_secret_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     organization: Mapped["Organization"] = relationship("Organization", back_populates="users")

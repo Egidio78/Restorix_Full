@@ -4,7 +4,8 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models.user import User
 from app.core.security import verify_password, create_access_token, create_refresh_token, decode_token, hash_password
-from app.schemas.auth import LoginRequest, TokenResponse, Require2FAResponse
+from app.core.encryption import encrypt, decrypt
+from app.schemas.auth import LoginRequest, TokenResponse, Require2FAResponse, TwoFAVerifyRequest, TwoFADisableRequest
 from app.schemas.user import UserOut
 from app.api.deps import get_current_user
 from app.config import get_settings
@@ -14,7 +15,6 @@ import io
 import base64
 import secrets
 import qrcode
-from pydantic import BaseModel
 
 # Pre-computed dummy hash to prevent timing attacks during login
 # (always run bcrypt even when user doesn't exist)
@@ -48,7 +48,6 @@ async def login(
     if user.two_fa_enabled:
         if not payload.totp_code:
             return Require2FAResponse()
-        from app.core.encryption import decrypt
         if not user.two_fa_secret_enc:
             raise HTTPException(status_code=500, detail="2FA configuration error")
         secret = decrypt(user.two_fa_secret_enc)
@@ -121,28 +120,28 @@ async def me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
-class TwoFAVerifyRequest(BaseModel):
-    code: str
-    secret: str
-
-
-class TwoFADisableRequest(BaseModel):
-    password: str
-
-
 @router.post("/2fa/setup")
-async def setup_2fa(current_user: User = Depends(get_current_user)):
-    """Generate a new TOTP secret and return QR code (does not persist — user must verify first)."""
+async def setup_2fa(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Generate a new TOTP secret, store it server-side as pending, and return QR code."""
     secret = pyotp.random_base32()
     settings = get_settings()
     totp = pyotp.TOTP(secret)
     uri = totp.provisioning_uri(name=current_user.email, issuer_name=settings.app_name)
 
+    # Store pending secret server-side (encrypted) until user verifies
+    current_user.pending_two_fa_secret_enc = encrypt(secret)
+    db.add(current_user)
+    await db.commit()
+
     # Generate QR code PNG as base64
     img = qrcode.make(uri)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
-    qr_b64 = base64.b64encode(buf.getvalue()).decode()
+    buf.seek(0)
+    qr_b64 = base64.b64encode(buf.read()).decode()
 
     return {"secret": secret, "qr_code": qr_b64}
 
@@ -153,19 +152,22 @@ async def verify_2fa(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Verify TOTP code and enable 2FA for the current user."""
-    from app.core.encryption import encrypt
+    """Verify TOTP code against server-stored pending secret and enable 2FA."""
+    if not current_user.pending_two_fa_secret_enc:
+        raise HTTPException(status_code=400, detail="No pending 2FA setup. Call /2fa/setup first.")
 
-    totp = pyotp.TOTP(payload.secret)
+    secret = decrypt(current_user.pending_two_fa_secret_enc)
+    totp = pyotp.TOTP(secret)
     if not totp.verify(payload.code, valid_window=1):
         raise HTTPException(status_code=400, detail="Invalid 2FA code")
 
-    # Generate 8 backup codes
-    backup_codes = [secrets.token_hex(4).upper() for _ in range(8)]
+    # Generate 8 backup codes (64-bit entropy each)
+    backup_codes = [secrets.token_hex(8).upper() for _ in range(8)]
 
     current_user.two_fa_enabled = True
-    current_user.two_fa_secret_enc = encrypt(payload.secret)
+    current_user.two_fa_secret_enc = encrypt(secret)
     current_user.two_fa_backup_codes_enc = encrypt(",".join(backup_codes))
+    current_user.pending_two_fa_secret_enc = None  # clear pending
     db.add(current_user)
     await db.commit()
 
