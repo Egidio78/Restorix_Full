@@ -3,24 +3,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
 from app.models.user import User
-from app.core.security import (
-    verify_password,
-    create_access_token,
-    create_refresh_token,
-    decode_token,
-)
+from app.core.security import verify_password, create_access_token, create_refresh_token, decode_token, hash_password
 from app.schemas.auth import LoginRequest, TokenResponse, Require2FAResponse
 from app.schemas.user import UserOut
 from app.api.deps import get_current_user
 from app.config import get_settings
 import pyotp
+import uuid
+
+# Pre-computed dummy hash to prevent timing attacks during login
+# (always run bcrypt even when user doesn't exist)
+_DUMMY_HASH = hash_password("dummy-timing-protection-value")
 
 router = APIRouter()
 
 
 def _cookie_opts() -> dict:
     settings = get_settings()
-    return dict(httponly=True, samesite="lax", secure=settings.app_env == "production")
+    return dict(httponly=True, samesite="lax", secure=settings.app_env != "development")
 
 
 @router.post("/login")
@@ -34,7 +34,9 @@ async def login(
     )
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(payload.password, user.password_hash):
+    # Always run bcrypt to prevent timing-based email enumeration
+    password_ok = verify_password(payload.password, user.password_hash if user else _DUMMY_HASH)
+    if not user or not password_ok:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     # 2FA check
@@ -42,6 +44,8 @@ async def login(
         if not payload.totp_code:
             return Require2FAResponse()
         from app.core.encryption import decrypt
+        if not user.two_fa_secret_enc:
+            raise HTTPException(status_code=500, detail="2FA configuration error")
         secret = decrypt(user.two_fa_secret_enc)
         totp = pyotp.TOTP(secret)
         if not totp.verify(payload.totp_code, valid_window=1):
@@ -79,15 +83,14 @@ async def refresh(
     if payload is None or payload.get("type") != "refresh":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
-    import uuid as _uuid
     try:
-        user_uuid = _uuid.UUID(payload["sub"])
+        user_uuid = uuid.UUID(payload["sub"])
     except (ValueError, KeyError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     result = await db.execute(select(User).where(User.id == user_uuid, User.is_active == True))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
 
     settings = get_settings()
     access_token = create_access_token(subject=str(user.id), role=user.role)
@@ -102,8 +105,9 @@ async def refresh(
 
 @router.post("/logout")
 async def logout(response: Response):
-    response.delete_cookie("access_token")
-    response.delete_cookie("refresh_token")
+    opts = _cookie_opts()
+    response.delete_cookie("access_token", httponly=opts["httponly"], samesite=opts["samesite"], secure=opts["secure"])
+    response.delete_cookie("refresh_token", httponly=opts["httponly"], samesite=opts["samesite"], secure=opts["secure"])
     return {"message": "Logged out"}
 
 
