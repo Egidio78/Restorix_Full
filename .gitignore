@@ -1,0 +1,25 @@
+# Chiavi private e credenziali
+*.ppk
+*.pem
+*.key
+*.p12
+*.pfx
+.env
+.env.*
+!.env.example
+
+# Archivi
+*.rar
+*.zip
+*.tar.gz
+*.7z
+
+# Superpowers brainstorm (file temporanei sessione)
+.superpowers/
+
+# Claude Code session data
+.claude/settings.local.json
+
+# OS
+.DS_Store
+Thumbs.db

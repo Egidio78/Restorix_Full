@@ -1,0 +1,190 @@
+{
+  "schema_version": "1.0",
+  "scheda_moto": {
+    "modello": "BMW F750GS",
+    "anno": 2018,
+    "allestimento": "Exclusive",
+    "vin": null,
+    "targa": null,
+    "data_immatricolazione": null,
+    "km_attuali": 28352,
+    "data_aggiornamento_km": "2026-04-21",
+    "uso_prevalente": "pendolare",
+    "uso_invernale": false,
+    "zona_climatica": "Sud Italia",
+    "km_annui_medi": 3500,
+    "rimessaggio": "garage_coperto",
+    "accessori": []
+  },
+  "consumabili": {
+    "pneumatico_anteriore": {
+      "modello": null,
+      "km_installazione": null,
+      "data_installazione": null,
+      "km_residui_stimati": null,
+      "scadenza_temporale": null,
+      "note": "Da censire: misura/marca/anno DOT"
+    },
+    "pneumatico_posteriore": {
+      "modello": null,
+      "km_installazione": null,
+      "data_installazione": null,
+      "km_residui_stimati": null,
+      "scadenza_temporale": null,
+      "note": "Da censire: misura/marca/anno DOT"
+    },
+    "pastiglie_freno_ant": {
+      "modello": null,
+      "km_installazione": null,
+      "data_installazione": null,
+      "spessore_residuo_mm": null,
+      "note": "Da misurare in checklist primaverile"
+    },
+    "pastiglie_freno_post": {
+      "modello": null,
+      "km_installazione": null,
+      "data_installazione": null,
+      "spessore_residuo_mm": null,
+      "note": "Da misurare in checklist primaverile"
+    },
+    "catena": {
+      "modello": null,
+      "km_installazione": null,
+      "data_installazione": null,
+      "km_ultima_lubrificazione": null,
+      "km_ultima_regolazione": null,
+      "note": "Stato e tensione da verificare in checklist primaverile"
+    },
+    "corona": {
+      "modello": null,
+      "km_installazione": null,
+      "data_installazione": null,
+      "denti": null,
+      "note": null
+    },
+    "pignone": {
+      "modello": null,
+      "km_installazione": null,
+      "data_installazione": null,
+      "denti": null,
+      "note": null
+    },
+    "batteria": {
+      "modello": null,
+      "data_installazione": null,
+      "tensione_ultima_misura_v": null,
+      "data_ultima_misura": null,
+      "note": "Rimessaggio 2025/26 senza mantenitore — verificare tensione a riposo"
+    },
+    "candele": {
+      "modello": "NGK LMAR8A-9",
+      "km_installazione": 25000,
+      "data_installazione": "2025-05-28",
+      "note": "Sostituite al tagliando 25.000 km"
+    },
+    "filtro_aria": {
+      "modello": null,
+      "km_installazione": 25000,
+      "data_installazione": "2025-05-28",
+      "note": "Sostituito al tagliando 25.000 km"
+    },
+    "filtro_olio": {
+      "modello": null,
+      "km_installazione": 25000,
+      "data_installazione": "2025-05-28",
+      "note": "Sostituito al tagliando 25.000 km"
+    },
+    "liquido_freni": {
+      "tipo": "DOT 4",
+      "data_ultima_sostituzione": null,
+      "scadenza_temporale": null,
+      "note": "Data ultima sostituzione da recuperare — DOT 4 va sostituito ogni 2 anni"
+    },
+    "liquido_raffreddamento": {
+      "tipo": null,
+      "data_ultima_sostituzione": null,
+      "scadenza_temporale": null,
+      "note": "Da censire — sostituzione tipica ogni ~4 anni"
+    },
+    "olio_forcella": {
+      "tipo": null,
+      "km_ultima_sostituzione": null,
+      "data_ultima_sostituzione": null,
+      "note": null
+    }
+  },
+  "interventi": [
+    {
+      "id": "2025-001",
+      "data": "2025-05-28",
+      "km": 25000,
+      "tipo": "tagliando",
+      "categoria": ["olio_motore", "filtro_olio", "filtro_aria", "candele"],
+      "descrizione": "Tagliando 25.000 km — olio motore, filtro olio, filtro aria, candele. Officina indipendente.",
+      "ricambi": [],
+      "manodopera_ore": null,
+      "costo_totale": null,
+      "officina_o_diy": "officina",
+      "officina_nome": null,
+      "note": "Codici ricambio, marca olio e costi da recuperare dalla fattura"
+    }
+  ],
+  "scadenze_aperte": [
+    {
+      "id": "S-001",
+      "tipo": "tagliando_annuale_2026",
+      "km_trigger": null,
+      "data_trigger": "2026-05-28",
+      "priorita": "urgente",
+      "note": "Service annuale (olio motore + filtro olio) — 12 mesi dall'ultimo del 28/05/2025"
+    },
+    {
+      "id": "S-002",
+      "tipo": "tagliando_30000_km",
+      "km_trigger": 30000,
+      "data_trigger": null,
+      "priorita": "entro_1648_km",
+      "note": "Service chilometrico — coincide indicativamente con quello annuale, conviene accorparli"
+    },
+    {
+      "id": "S-003",
+      "tipo": "preparazione_primaverile_2026",
+      "km_trigger": null,
+      "data_trigger": "2026-05-15",
+      "priorita": "urgente",
+      "note": "Checklist primaverile completa prima di rientrare in uso pendolare"
+    },
+    {
+      "id": "S-004",
+      "tipo": "verifica_liquido_freni",
+      "km_trigger": null,
+      "data_trigger": "2026-05-28",
+      "priorita": "media",
+      "note": "DOT 4 igroscopico — scadenza biennale. Se di prima dotazione 2018 = ampiamente scaduto"
+    },
+    {
+      "id": "S-005",
+      "tipo": "verifica_liquido_raffreddamento",
+      "km_trigger": null,
+      "data_trigger": "2026-05-28",
+      "priorita": "media",
+      "note": "Sostituzione tipica ogni ~4 anni — verificare data ultima"
+    }
+  ],
+  "stagione": {
+    "stato": "da_preparare",
+    "ultimo_rimessaggio": {
+      "data": "2025-11-30",
+      "km": null,
+      "checklist_completata": false,
+      "note": "Data approssimativa fine stagione 2025. Rimessaggio 'al naturale' (no mantenitore, no stabilizzatore noti)."
+    },
+    "ultima_preparazione_primaverile": {
+      "data": null,
+      "km": null,
+      "checklist_completata": false,
+      "note": "Ad aprile 2026 messa in moto e fatto un giro, ma checklist completa non eseguita"
+    }
+  },
+  "problemi_aperti": []
+}
