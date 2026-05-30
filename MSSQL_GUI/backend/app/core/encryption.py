@@ -3,14 +3,14 @@ import os
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from app.config import get_settings
 
-settings = get_settings()
-
 
 def _get_key() -> bytes:
-    key_hex = settings.encryption_key.get_secret_value()
-    # Assicura 32 bytes (256 bit) — pad or truncate to 64 hex chars
-    key_bytes = bytes.fromhex(key_hex[:64].ljust(64, "0"))
-    return key_bytes
+    key_hex = get_settings().encryption_key.get_secret_value()
+    if len(key_hex) != 64:
+        raise ValueError(
+            f"ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes); got {len(key_hex)}"
+        )
+    return bytes.fromhex(key_hex)
 
 
 def encrypt(plaintext: str) -> str:

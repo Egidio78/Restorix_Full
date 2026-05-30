@@ -57,3 +57,33 @@ def test_encrypt_same_value_different_ciphertext():
     encrypted2 = encrypt("same_value")
     # AES-GCM usa nonce random, deve produrre ciphertext diversi
     assert encrypted1 != encrypted2
+
+
+def test_create_access_token_has_future_exp():
+    import time
+    token = create_access_token(subject="user-id", role="viewer")
+    payload = decode_token(token)
+    assert payload is not None
+    assert payload["exp"] > time.time()
+
+
+def test_create_refresh_token_has_future_exp():
+    import time
+    token = create_refresh_token(subject="user-id")
+    payload = decode_token(token)
+    assert payload is not None
+    assert payload["exp"] > time.time()
+
+
+def test_decode_expired_token_returns_none():
+    from datetime import datetime, timedelta, timezone
+    import jwt as pyjwt
+    from app.core.security import _secret_key
+
+    payload = {
+        "sub": "user",
+        "type": "access",
+        "exp": datetime.now(timezone.utc) - timedelta(seconds=1),
+    }
+    expired_token = pyjwt.encode(payload, _secret_key(), algorithm="HS256")
+    assert decode_token(expired_token) is None

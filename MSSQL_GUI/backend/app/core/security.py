@@ -4,8 +4,6 @@ import jwt
 import bcrypt
 from app.config import get_settings
 
-settings = get_settings()
-
 
 def hash_password(password: str) -> str:
     salt = bcrypt.gensalt()
@@ -17,10 +15,11 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def _secret_key() -> str:
-    return settings.secret_key.get_secret_value()
+    return get_settings().secret_key.get_secret_value()
 
 
 def create_access_token(subject: str, role: str) -> str:
+    settings = get_settings()
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.access_token_expire_minutes
     )
@@ -34,6 +33,7 @@ def create_access_token(subject: str, role: str) -> str:
 
 
 def create_refresh_token(subject: str) -> str:
+    settings = get_settings()
     expire = datetime.now(timezone.utc) + timedelta(
         days=settings.refresh_token_expire_days
     )
