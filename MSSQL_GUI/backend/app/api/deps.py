@@ -1,3 +1,4 @@
+import uuid
 from fastapi import Depends, HTTPException, Cookie, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -21,8 +22,13 @@ async def get_current_user(
     if payload is None or payload.get("type") != "access":
         raise credentials_exception
 
-    user_id: str = payload.get("sub")
-    if not user_id:
+    user_id_str: str = payload.get("sub")
+    if not user_id_str:
+        raise credentials_exception
+
+    try:
+        user_id = uuid.UUID(user_id_str)
+    except ValueError:
         raise credentials_exception
 
     result = await db.execute(select(User).where(User.id == user_id, User.is_active == True))
