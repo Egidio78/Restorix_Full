@@ -21,9 +21,12 @@ export function useAuth() {
     if (error) clearUser();
   }, [data, error, setUser, clearUser]);
 
+  // Use data (server truth) if available, fall back to store (cached)
+  const resolvedUser = data ?? user;
+
   return {
-    user: data ?? user,
+    user: resolvedUser,
     isLoading,
-    isAuthenticated: !!data,
+    isAuthenticated: !!resolvedUser,
   };
 }
