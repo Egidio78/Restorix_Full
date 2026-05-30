@@ -1,10 +1,14 @@
-from pydantic_settings import BaseSettings
+from typing import Literal
+from pydantic import SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
+
     app_name: str = "DBShield"
-    app_env: str = "production"
+    app_env: Literal["development", "staging", "production"] = "production"
 
     # Database
     database_url: str
@@ -13,8 +17,8 @@ class Settings(BaseSettings):
     redis_url: str = "redis://redis:6379/0"
 
     # Security
-    secret_key: str
-    encryption_key: str
+    secret_key: SecretStr
+    encryption_key: SecretStr
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30
 
@@ -25,16 +29,12 @@ class Settings(BaseSettings):
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
-    smtp_password: str = ""
+    smtp_password: SecretStr = SecretStr("")
     smtp_from: str = "noreply@dbshield.io"
 
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",")]
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
 
 
 @lru_cache

@@ -10,6 +10,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/api/docs" if settings.app_env != "production" else None,
     redoc_url=None,
+    openapi_url="/openapi.json" if settings.app_env != "production" else None,
 )
 
 app.add_middleware(
