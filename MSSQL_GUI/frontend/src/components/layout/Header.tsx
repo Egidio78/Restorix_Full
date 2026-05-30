@@ -48,7 +48,8 @@ export default function Header() {
               <span className="text-foreground font-medium max-w-[160px] truncate">
                 {user.email}
               </span>
-              <ChevronDown className="h-3 w-3 text-muted-foreground" />
+              {/* TODO: user dropdown menu */}
+              <ChevronDown className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
             </div>
             <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-0.5 rounded-full">
               {ROLE_LABELS[user.role] ?? user.role}

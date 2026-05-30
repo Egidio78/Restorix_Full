@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   Activity,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -18,9 +19,8 @@ interface StatCard {
   label: string;
   value: string;
   description: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: LucideIcon;
   iconColor: string;
-  trend?: "up" | "down" | "neutral";
 }
 
 const stats: StatCard[] = [

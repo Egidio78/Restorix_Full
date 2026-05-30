@@ -10,10 +10,11 @@ import {
   Settings,
   ShieldCheck,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 interface NavItem {
   to: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: LucideIcon;
   label: string;
 }
 
@@ -51,6 +52,7 @@ export default function Sidebar() {
             <Link
               key={to}
               to={to}
+              aria-current={isActive ? "page" : undefined}
               className={cn(
                 "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all duration-150",
                 isActive
