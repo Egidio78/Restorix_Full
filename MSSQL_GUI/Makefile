@@ -1,4 +1,4 @@
-.PHONY: dev up down logs migrate test
+.PHONY: dev up down logs migrate test shell
 
 dev:
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml up
