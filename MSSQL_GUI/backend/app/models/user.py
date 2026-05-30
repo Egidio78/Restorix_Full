@@ -22,10 +22,10 @@ class User(Base, TimestampMixin):
     org_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False
     )
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        SAEnum(UserRole), nullable=False, default=UserRole.viewer
+        SAEnum(UserRole, name="userrole", create_type=False), nullable=False, default=UserRole.viewer
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 

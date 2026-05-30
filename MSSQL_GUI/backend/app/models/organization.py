@@ -21,7 +21,7 @@ class Organization(Base, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     plan: Mapped[OrgPlan] = mapped_column(
-        SAEnum(OrgPlan), nullable=False, default=OrgPlan.saas_starter
+        SAEnum(OrgPlan, name="orgplan", create_type=False), nullable=False, default=OrgPlan.saas_starter
     )
     license_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     require_2fa: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
