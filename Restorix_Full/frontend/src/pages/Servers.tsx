@@ -435,7 +435,7 @@ export default function Servers() {
   })
 
   const installCmd = (token: string) =>
-    "curl -sSL https://backupdb.edminformatica.it/install.sh | bash -s -- --token=" + token
+    "curl -sSL https://restorix.edminformatica.it/install.sh | bash -s -- --token=" + token
 
   return (
     <div className="space-y-6">
