@@ -1,3 +1,4 @@
+from __future__ import annotations
 import logging
 import requests
 from dbshield_agent.config import AgentConfig

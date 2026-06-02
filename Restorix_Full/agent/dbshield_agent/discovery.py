@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Database discovery via sqlcmd."""
 import logging
 import subprocess

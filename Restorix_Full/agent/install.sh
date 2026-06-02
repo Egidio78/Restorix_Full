@@ -51,61 +51,40 @@ else
 fi
 info "Detected OS: ${OS_ID} ${OS_VERSION}"
 
-# Install Python 3
+# Install Python 3 (>= 3.8 supported via __future__ annotations)
 PYTHON_CMD=""
 
 install_python() {
-    # Check if a suitable Python (>= 3.10) already exists
-    for candidate in python3.12 python3.11 python3.10; do
+    # Prefer newer Python if already available
+    for candidate in python3.12 python3.11 python3.10 python3.9 python3.8 python3; do
         if command -v "$candidate" &>/dev/null; then
-            PYTHON_CMD="$candidate"
-            info "Python found: $($candidate --version 2>&1)"
-            return 0
+            PY_MAJ=$("$candidate" -c 'import sys; print(sys.version_info.major)')
+            PY_MIN=$("$candidate" -c 'import sys; print(sys.version_info.minor)')
+            if [ "$PY_MAJ" -eq 3 ] && [ "$PY_MIN" -ge 8 ]; then
+                PYTHON_CMD="$candidate"
+                info "Python found: $($candidate --version 2>&1)"
+                return 0
+            fi
         fi
     done
 
-    # Check system python3 version
-    if command -v python3 &>/dev/null; then
-        PY_VER=$(python3 -c 'import sys; print(sys.version_info.minor)')
-        PY_MAJ=$(python3 -c 'import sys; print(sys.version_info.major)')
-        if [ "$PY_MAJ" -eq 3 ] && [ "$PY_VER" -ge 10 ]; then
-            PYTHON_CMD="python3"
-            info "Python found: $(python3 --version 2>&1)"
-            return 0
-        fi
-        info "System Python too old ($(python3 --version 2>&1)). Installing Python 3.11..."
-    else
-        info "Python not found. Installing Python 3.11..."
-    fi
-
+    # Install python3 from system repos (no PPA needed)
+    info "Installing Python 3 from system repositories..."
     case "${OS_ID}" in
         ubuntu|debian)
             apt-get update -qq
-            apt-get install -y -qq software-properties-common
-            add-apt-repository -y ppa:deadsnakes/ppa
-            # Rimuove cache stale del PPA (da tentativi precedenti) e forza re-download dei Package lists
-            rm -f /var/lib/apt/lists/*deadsnakes*
-            apt-get update -y
-            if apt-get install -y python3.11 python3.11-venv python3.11-distutils; then
-                PYTHON_CMD="python3.11"
-            elif apt-get install -y python3.10 python3.10-venv python3.10-distutils; then
-                PYTHON_CMD="python3.10"
-            else
-                error "Impossibile installare Python 3.10/3.11 dal PPA deadsnakes. Prova manualmente: apt-get install python3.11"
-            fi
+            apt-get install -y -qq python3 python3-venv python3-distutils python3-pip
             ;;
         centos|rhel|rocky|almalinux)
-            yum install -y python3.11 python3.11-pip 2>/dev/null || \
-                dnf install -y python3.11 python3.11-pip
-            PYTHON_CMD="python3.11"
+            yum install -y python3 python3-pip 2>/dev/null || dnf install -y python3 python3-pip
             ;;
         fedora)
-            dnf install -y python3.11
-            PYTHON_CMD="python3.11"
+            dnf install -y python3
             ;;
         *)
-            error "Unsupported OS: ${OS_ID}. Install Python 3.10+ manually and re-run." ;;
+            error "Unsupported OS: ${OS_ID}. Install Python 3.8+ manually and re-run." ;;
     esac
+    PYTHON_CMD="python3"
     success "Python installed: $($PYTHON_CMD --version 2>&1)"
 }
 

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """MySQL backup and discovery via mysql/mysqldump CLI."""
 import logging
 import os

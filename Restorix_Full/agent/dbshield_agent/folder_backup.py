@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Filesystem folder backup using tar+gzip."""
 import logging
 import os
