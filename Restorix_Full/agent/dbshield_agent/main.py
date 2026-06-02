@@ -18,7 +18,7 @@ def setup_logging(level: str) -> None:
 
 
 def main() -> None:
-    config_path = os.environ.get("DBSHIELD_CONFIG", "/etc/dbshield-agent/config.json")
+    config_path = os.environ.get("RESTORIX_CONFIG", "/etc/restorix-agent/config.json")
     config = load_config(config_path)
     setup_logging(config.log_level)
 

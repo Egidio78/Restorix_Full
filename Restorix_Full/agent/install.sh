@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# DBShield Agent Installer
+# Restorix Agent Installer
 # Usage: curl -sSL https://backupdb.edminformatica.it/install.sh | bash -s -- --token=TOKEN_HERE
 
 AGENT_VERSION="1.0.0"
-PLATFORM_URL="https://backupdb.edminformatica.it"
-INSTALL_DIR="/opt/dbshield-agent"
-CONFIG_DIR="/etc/dbshield-agent"
-SERVICE_NAME="dbshield-agent"
-AGENT_USER="dbshield"
-LOG_DIR="/var/log/dbshield-agent"
+PLATFORM_URL="https://restorix.edminformatica.it"
+INSTALL_DIR="/opt/restorix-agent"
+CONFIG_DIR="/etc/restorix-agent"
+SERVICE_NAME="restorix-agent"
+AGENT_USER="restorix"
+LOG_DIR="/var/log/restorix-agent"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -32,12 +32,12 @@ for arg in "$@"; do
     esac
 done
 
-[ -z "$TOKEN" ] && error "Missing --token argument. Get your token from the DBShield dashboard."
+[ -z "$TOKEN" ] && error "Missing --token argument. Get your token from the Restorix dashboard."
 
 # Must be root
 [ "$EUID" -ne 0 ] && error "This script must be run as root"
 
-info "DBShield Agent v${AGENT_VERSION} installer"
+info "Restorix Agent v${AGENT_VERSION} installer"
 info "Platform: ${PLATFORM_URL}"
 echo
 
@@ -133,12 +133,12 @@ fi
 if id mssql &>/dev/null; then
     info "Local SQL Server detected — configuring shared backup directory"
     usermod -a -G mssql "${AGENT_USER}" 2>/dev/null || true
-    TEMP_DIR="/var/opt/mssql/backups/dbshield"
+    TEMP_DIR="/var/opt/mssql/backups/restorix"
     mkdir -p "${TEMP_DIR}"
     chown mssql:mssql "${TEMP_DIR}"
     chmod 770 "${TEMP_DIR}"
 else
-    TEMP_DIR="/tmp/dbshield"
+    TEMP_DIR="/tmp/restorix"
     mkdir -p "${TEMP_DIR}"
     chown "${AGENT_USER}:${AGENT_USER}" "${TEMP_DIR}"
 fi
@@ -169,8 +169,8 @@ info "Installing agent dependencies..."
 
 # Download and install agent package from platform
 info "Downloading agent package..."
-AGENT_PKG_URL="${PLATFORM_URL}/agent/dbshield-agent-${AGENT_VERSION}.tar.gz"
-AGENT_PKG="/tmp/dbshield-agent-${AGENT_VERSION}.tar.gz"
+AGENT_PKG_URL="${PLATFORM_URL}/agent/restorix-agent-${AGENT_VERSION}.tar.gz"
+AGENT_PKG="/tmp/restorix-agent-${AGENT_VERSION}.tar.gz"
 
 if curl -sSLf -o "${AGENT_PKG}" "${AGENT_PKG_URL}" 2>/dev/null; then
     "${INSTALL_DIR}/venv/bin/pip" install --quiet "${AGENT_PKG}"
@@ -198,7 +198,7 @@ chown root:"${AGENT_USER}" "${CONFIG_DIR}/config.json"
 info "Creating systemd service..."
 cat > "/etc/systemd/system/${SERVICE_NAME}.service" << SERVICEEOF
 [Unit]
-Description=DBShield Backup Agent
+Description=Restorix Backup Agent
 After=network.target
 Wants=network-online.target
 
@@ -206,8 +206,8 @@ Wants=network-online.target
 Type=simple
 User=${AGENT_USER}
 Group=${AGENT_USER}
-ExecStart=${INSTALL_DIR}/venv/bin/dbshield-agent
-Environment=DBSHIELD_CONFIG=${CONFIG_DIR}/config.json
+ExecStart=${INSTALL_DIR}/venv/bin/restorix-agent
+Environment=RESTORIX_CONFIG=${CONFIG_DIR}/config.json
 Restart=always
 RestartSec=10
 StandardOutput=append:${LOG_DIR}/agent.log
@@ -224,7 +224,7 @@ systemctl restart "${SERVICE_NAME}"
 
 sleep 2
 if systemctl is-active --quiet "${SERVICE_NAME}"; then
-    success "DBShield Agent is running!"
+    success "Restorix Agent is running!"
 else
     warn "Agent service may not have started. Check logs: journalctl -u ${SERVICE_NAME} -n 20"
 fi
@@ -238,4 +238,4 @@ echo "  Config:   ${CONFIG_DIR}/config.json"
 echo "  Logs:     ${LOG_DIR}/agent.log"
 echo "  Service:  systemctl status ${SERVICE_NAME}"
 echo
-info "The agent will appear online in the DBShield dashboard within 30 seconds."
+info "The agent will appear online in the Restorix dashboard within 30 seconds."
