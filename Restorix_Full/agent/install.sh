@@ -52,32 +52,68 @@ fi
 info "Detected OS: ${OS_ID} ${OS_VERSION}"
 
 # Install Python 3
+PYTHON_CMD=""
+
 install_python() {
+    # Check if a suitable Python (>= 3.10) already exists
+    for candidate in python3.12 python3.11 python3.10; do
+        if command -v "$candidate" &>/dev/null; then
+            PYTHON_CMD="$candidate"
+            info "Python found: $($candidate --version 2>&1)"
+            return 0
+        fi
+    done
+
+    # Check system python3 version
     if command -v python3 &>/dev/null; then
-        PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
-        info "Python found: ${PYTHON_VERSION}"
-        return 0
+        PY_VER=$(python3 -c 'import sys; print(sys.version_info.minor)')
+        PY_MAJ=$(python3 -c 'import sys; print(sys.version_info.major)')
+        if [ "$PY_MAJ" -eq 3 ] && [ "$PY_VER" -ge 10 ]; then
+            PYTHON_CMD="python3"
+            info "Python found: $(python3 --version 2>&1)"
+            return 0
+        fi
+        info "System Python too old ($(python3 --version 2>&1)). Installing Python 3.11..."
+    else
+        info "Python not found. Installing Python 3.11..."
     fi
-    info "Installing Python 3..."
+
     case "${OS_ID}" in
         ubuntu|debian)
-            apt-get update -qq && apt-get install -y -qq python3 python3-pip python3-venv ;;
+            apt-get update -qq
+            apt-get install -y -qq software-properties-common
+            add-apt-repository -y ppa:deadsnakes/ppa
+            apt-get update -qq
+            apt-get install -y -qq python3.11 python3.11-venv python3.11-distutils
+            PYTHON_CMD="python3.11"
+            ;;
         centos|rhel|rocky|almalinux)
-            yum install -y python3 python3-pip 2>/dev/null || dnf install -y python3 python3-pip ;;
+            yum install -y python3.11 python3.11-pip 2>/dev/null || \
+                dnf install -y python3.11 python3.11-pip
+            PYTHON_CMD="python3.11"
+            ;;
         fedora)
-            dnf install -y python3 python3-pip ;;
+            dnf install -y python3.11
+            PYTHON_CMD="python3.11"
+            ;;
         *)
-            error "Unsupported OS: ${OS_ID}. Install Python 3.9+ manually." ;;
+            error "Unsupported OS: ${OS_ID}. Install Python 3.10+ manually and re-run." ;;
     esac
-    success "Python installed"
+    success "Python installed: $($PYTHON_CMD --version 2>&1)"
 }
 
 install_python
 
 # Install pip if missing
-if ! python3 -m pip --version &>/dev/null; then
+if ! "$PYTHON_CMD" -m pip --version &>/dev/null; then
     info "Installing pip..."
-    curl -sSL https://bootstrap.pypa.io/get-pip.py | python3 -
+    PY_MINOR=$("$PYTHON_CMD" -c 'import sys; print(sys.version_info.minor)')
+    PY_MAJOR=$("$PYTHON_CMD" -c 'import sys; print(sys.version_info.major)')
+    if [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -le 9 ]; then
+        curl -sSL "https://bootstrap.pypa.io/pip/${PY_MAJOR}.${PY_MINOR}/get-pip.py" | "$PYTHON_CMD" -
+    else
+        curl -sSL https://bootstrap.pypa.io/get-pip.py | "$PYTHON_CMD" -
+    fi
 fi
 
 # Check sqlcmd (warn only)
@@ -85,22 +121,6 @@ if ! command -v sqlcmd &>/dev/null; then
     warn "sqlcmd not found. Install mssql-tools to enable MSSQL backups:"
     warn "  Ubuntu/Debian: https://docs.microsoft.com/sql/linux/sql-server-linux-setup-tools"
     warn "  Agent will install but backups will fail until sqlcmd is available."
-fi
-
-# Verifica/installazione mysql client (per backup MySQL)
-if ! command -v mysqldump &>/dev/null; then
-    echo "mysqldump non trovato. Tentativo installazione default-mysql-client..."
-    if command -v apt-get &>/dev/null; then
-        apt-get install -y default-mysql-client 2>/dev/null && echo "mysql-client installato." || \
-            echo "WARNING: impossibile installare mysql-client. I backup MySQL falliranno."
-    elif command -v yum &>/dev/null; then
-        yum install -y mysql 2>/dev/null && echo "mysql installato." || \
-            echo "WARNING: impossibile installare mysql. I backup MySQL falliranno."
-    else
-        echo "WARNING: mysqldump non trovato. I backup MySQL falliranno."
-    fi
-else
-    echo "mysqldump trovato: $(which mysqldump)"
 fi
 
 # Create agent user
@@ -128,19 +148,19 @@ info "Creating directories..."
 mkdir -p "${INSTALL_DIR}" "${CONFIG_DIR}" "${LOG_DIR}"
 chown "${AGENT_USER}:${AGENT_USER}" "${LOG_DIR}"
 
-# Ensure python3-venv module is available (often missing on Debian/Ubuntu)
-if ! python3 -c "import ensurepip" >/dev/null 2>&1; then
-    info "python3-venv missing — installing..."
+# Ensure venv module is available for the selected Python
+if ! "$PYTHON_CMD" -c "import ensurepip" >/dev/null 2>&1; then
+    info "venv missing for ${PYTHON_CMD} — installing..."
     if [ "${OS_ID}" = "ubuntu" ] || [ "${OS_ID}" = "debian" ]; then
-        PY_MINOR=$(python3 -c "import sys; print('%d.%d' % sys.version_info[:2])")
-        apt-get install -y -qq "python${PY_MINOR}-venv" python3-venv python3-full 2>/dev/null \
+        PY_MINOR=$("$PYTHON_CMD" -c "import sys; print('%d.%d' % sys.version_info[:2])")
+        apt-get install -y -qq "python${PY_MINOR}-venv" 2>/dev/null \
             || apt-get install -y -qq python3-venv python3-full
     fi
 fi
 
 # Create virtualenv
 info "Creating Python virtual environment at ${INSTALL_DIR}..."
-python3 -m venv "${INSTALL_DIR}/venv"
+"$PYTHON_CMD" -m venv "${INSTALL_DIR}/venv"
 "${INSTALL_DIR}/venv/bin/pip" install --quiet --upgrade pip
 
 # Install dependencies
