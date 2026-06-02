@@ -14,7 +14,7 @@ interface BackupJob {
   id: string
   name: string
   server_id: string
-  backup_type: "mssql" | "folder"
+  backup_type: "mssql" | "mysql" | "folder"
   db_instance_id: string | null
   folder_path: string | null
   storage_destination_id: string
@@ -26,7 +26,7 @@ interface BackupJob {
   enabled: boolean
 }
 
-interface Server { id: string; name: string; hostname: string }
+interface Server { id: string; name: string; hostname: string; engine?: string }
 interface DbInstance { id: string; name: string; mssql_instance: string }
 interface StorageDest { id: string; name: string; storage_type: string }
 
@@ -45,7 +45,7 @@ export default function Jobs() {
   const [selectedServer, setSelectedServer] = useState("")
   const [cronPreset, setCronPreset] = useState("")
   const [customCron, setCustomCron] = useState("")
-  const [backupType, setBackupType] = useState<"mssql" | "folder">("mssql")
+  const [backupType, setBackupType] = useState<"mssql" | "mysql" | "folder">("mssql")
   const [folderPath, setFolderPath] = useState("")
   const [form, setForm] = useState({
     name: "", db_instance_id: "", storage_destination_id: "",
@@ -79,7 +79,7 @@ export default function Jobs() {
   const { data: editDbInstances = [] } = useQuery<DbInstance[]>({
     queryKey: ["db-instances", editJob?.server_id],
     queryFn: () => editJob ? api.get(`/servers/${editJob.server_id}/databases`).then(r => r.data) : Promise.resolve([]),
-    enabled: !!editJob && editJob.backup_type === "mssql",
+    enabled: !!editJob && (editJob.backup_type === "mssql" || editJob.backup_type === "mysql"),
   })
 
   const { data: storages = [] } = useQuery<StorageDest[]>({
@@ -99,7 +99,7 @@ export default function Jobs() {
     setSelectedServer("")
     setCronPreset("")
     setCustomCron("")
-    setBackupType("mssql")
+    setBackupType("mssql" as "mssql" | "mysql" | "folder")
     setFolderPath("")
   }
 
@@ -115,7 +115,7 @@ export default function Jobs() {
       retention_days: form.retention_days,
       enabled: form.enabled,
       backup_type: backupType,
-      db_instance_id: backupType === "mssql" ? form.db_instance_id : null,
+      db_instance_id: (backupType === "mssql" || backupType === "mysql") ? form.db_instance_id : null,
       folder_path: backupType === "folder" ? folderPath : null,
     }),
     onSuccess: () => {
@@ -237,7 +237,7 @@ export default function Jobs() {
                         {job.enabled ? "Attivo" : "Disabilitato"}
                       </Badge>
                       <Badge variant="default">
-                        {job.backup_type === "folder" ? "Cartella" : "MSSQL"}
+                        {job.backup_type === "folder" ? "Cartella" : job.backup_type === "mysql" ? "MySQL" : "MSSQL"}
                       </Badge>
                       {job.compression_enabled && <Badge variant="default">Compresso</Badge>}
                       {job.encryption_enabled && <Badge variant="warning">Cifrato</Badge>}
@@ -251,6 +251,9 @@ export default function Jobs() {
                         </span>
                       ) : (
                         <span>DB: {getDbName(job.db_instance_id)}</span>
+                      )}
+                      {job.backup_type === "mysql" && (
+                        <span className="text-xs text-muted-foreground/70">.sql.gz</span>
                       )}
                       <span>Storage: {getStorageName(job.storage_destination_id)}</span>
                     </div>
@@ -306,15 +309,23 @@ export default function Jobs() {
             </div>
             <div className="space-y-1.5">
               <Label>Tipo di backup</Label>
-              <Select value={backupType} onValueChange={v => setBackupType(v as any)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="mssql">Database MSSQL</SelectItem>
-                  <SelectItem value="folder">Cartella filesystem</SelectItem>
-                </SelectContent>
-              </Select>
+              {(() => {
+                const selectedServerEngine = servers.find(s => s.id === selectedServer)?.engine ?? "mssql"
+                const mssqlDisabled = selectedServerEngine === "mysql"
+                const mysqlDisabled = selectedServerEngine === "mssql"
+                return (
+                  <Select value={backupType} onValueChange={v => setBackupType(v as "mssql" | "mysql" | "folder")}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="mssql" disabled={mssqlDisabled}>Database MSSQL {mssqlDisabled ? "(server MySQL)" : ""}</SelectItem>
+                      <SelectItem value="mysql" disabled={mysqlDisabled}>Database MySQL / MariaDB {mysqlDisabled ? "(server MSSQL)" : ""}</SelectItem>
+                      <SelectItem value="folder">Cartella filesystem</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )
+              })()}
             </div>
-            {backupType === "mssql" ? (
+            {(backupType === "mssql" || backupType === "mysql") ? (
               <div className="space-y-1.5">
                 <Label>Database</Label>
                 <Select value={form.db_instance_id} onValueChange={v => setForm(f => ({ ...f, db_instance_id: v }))} disabled={!selectedServer || dbInstances.length === 0}>
@@ -325,6 +336,9 @@ export default function Jobs() {
                     {dbInstances.map(d => <SelectItem key={d.id} value={d.id}>{d.name} ({d.mssql_instance})</SelectItem>)}
                   </SelectContent>
                 </Select>
+                {backupType === "mysql" && (
+                  <p className="text-xs text-muted-foreground">Output: <code>.sql.gz</code></p>
+                )}
               </div>
             ) : (
               <div className="space-y-1.5">
@@ -379,6 +393,11 @@ export default function Jobs() {
                 </label>
               </div>
             )}
+            {backupType === 'mysql' && (
+              <div className="rounded-md border p-3 bg-muted/30 text-sm text-muted-foreground">
+                I backup MySQL vengono sempre compressi in <code>.sql.gz</code> (gzip). La compressione nativa MSSQL non è applicabile.
+              </div>
+            )}
             {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
           <DialogFooter>
@@ -386,7 +405,7 @@ export default function Jobs() {
             <Button
               variant="restorix"
               disabled={!form.name || !selectedServer || !form.storage_destination_id || !cronValue ||
-                (backupType === "mssql" && !form.db_instance_id) ||
+                ((backupType === "mssql" || backupType === "mysql") && !form.db_instance_id) ||
                 (backupType === "folder" && !folderPath) ||
                 addMutation.isPending}
               onClick={() => addMutation.mutate()}
@@ -403,7 +422,7 @@ export default function Jobs() {
           <DialogHeader>
             <DialogTitle>Modifica Backup Job</DialogTitle>
             <DialogDescription>
-              Tipo: <strong>{editJob?.backup_type === "folder" ? "Cartella filesystem" : "Database MSSQL"}</strong> (non modificabile)
+              Tipo: <strong>{editJob?.backup_type === "folder" ? "Cartella filesystem" : editJob?.backup_type === "mysql" ? "Database MySQL / MariaDB" : "Database MSSQL"}</strong> (non modificabile)
             </DialogDescription>
           </DialogHeader>
           {editJob && (
@@ -412,7 +431,7 @@ export default function Jobs() {
                 <Label>Nome job</Label>
                 <Input value={editForm.name ?? ""} onChange={e => setEditForm((f: any) => ({ ...f, name: e.target.value }))} />
               </div>
-              {editJob.backup_type === "mssql" ? (
+              {(editJob.backup_type === "mssql" || editJob.backup_type === "mysql") ? (
                 <div className="space-y-1.5">
                   <Label>Database</Label>
                   <Select value={editForm.db_instance_id ?? ""} onValueChange={v => setEditForm((f: any) => ({ ...f, db_instance_id: v }))}>
@@ -472,6 +491,11 @@ export default function Jobs() {
                       <p className="text-xs text-muted-foreground mt-0.5">Usa BACKUP DATABASE ... WITH COMPRESSION. Salta il gzip esterno, ~10-20× più veloce.</p>
                     </span>
                   </label>
+                </div>
+              )}
+              {editJob.backup_type === 'mysql' && (
+                <div className="rounded-md border p-3 bg-muted/30 text-sm text-muted-foreground">
+                  I backup MySQL vengono sempre compressi in <code>.sql.gz</code> (gzip). La compressione nativa MSSQL non è applicabile.
                 </div>
               )}
               {editForm.encryption_enabled && (

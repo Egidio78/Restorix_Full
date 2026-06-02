@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import api from "@/lib/api"
 
 interface Server {
@@ -17,6 +18,7 @@ interface Server {
   agent_version: string | null
   status: "never_connected" | "online" | "offline"
   is_active: boolean
+  engine?: string
 }
 
 interface DbInstance {
@@ -153,7 +155,10 @@ function DatabasesModal({ server, onClose }: { server: Server; onClose: () => vo
       >
         <DialogHeader>
           <DialogTitle>Database — {server.name}</DialogTitle>
-          <DialogDescription>Registra i database MSSQL disponibili su questo server. Click sulla X o sul pulsante in basso per chiudere — non si chiude più cliccando fuori dalla finestra.</DialogDescription>
+          <DialogDescription>
+            Registra i database {(server.engine ?? "mssql") === "mysql" ? "MySQL / MariaDB" : "MSSQL"} disponibili su questo server.
+            Click sulla X o sul pulsante in basso per chiudere — non si chiude più cliccando fuori dalla finestra.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
@@ -215,14 +220,22 @@ function DatabasesModal({ server, onClose }: { server: Server; onClose: () => vo
               <h3 className="font-medium text-sm">Scopri database</h3>
               {!discovered && !discovering && (
                 <>
-                  <p className="text-xs text-muted-foreground">L'agente eseguirà <code className="bg-muted px-1 rounded">SELECT name FROM sys.databases</code> e mostrerà la lista.</p>
+                  {(server.engine ?? "mssql") === "mysql" ? (
+                    <p className="text-xs text-muted-foreground">L'agente eseguirà <code className="bg-muted px-1 rounded">SHOW DATABASES</code> e mostrerà la lista.</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">L'agente eseguirà <code className="bg-muted px-1 rounded">SELECT name FROM sys.databases</code> e mostrerà la lista.</p>
+                  )}
                   <div className="space-y-1.5">
-                    <Label>Istanza MSSQL</Label>
-                    <Input value={discoverForm.mssql_instance} onChange={e => setDiscoverForm(f => ({ ...f, mssql_instance: e.target.value }))} placeholder="localhost o hostname\istanza" />
+                    <Label>{(server.engine ?? "mssql") === "mysql" ? "Host:Porta (es. 192.168.1.10:3306)" : "Istanza MSSQL"}</Label>
+                    <Input
+                      value={discoverForm.mssql_instance}
+                      onChange={e => setDiscoverForm(f => ({ ...f, mssql_instance: e.target.value }))}
+                      placeholder={(server.engine ?? "mssql") === "mysql" ? "localhost:3306" : "localhost o hostname\\istanza"}
+                    />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1.5">
-                      <Label>Username (sa o lascia vuoto per Win auth)</Label>
+                      <Label>{(server.engine ?? "mssql") === "mysql" ? "Username" : "Username (sa o lascia vuoto per Win auth)"}</Label>
                       <Input value={discoverForm.username} onChange={e => setDiscoverForm(f => ({ ...f, username: e.target.value }))} />
                     </div>
                     <div className="space-y-1.5">
@@ -297,13 +310,21 @@ function DatabasesModal({ server, onClose }: { server: Server; onClose: () => vo
                 <Input placeholder="es. CRM_Production" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
-                <Label>Istanza MSSQL</Label>
-                <Input placeholder="es. localhost, 192.168.1.10\SQLEXPRESS" value={form.mssql_instance} onChange={e => setForm(f => ({ ...f, mssql_instance: e.target.value }))} />
+                <Label>{(server.engine ?? "mssql") === "mysql" ? "Host:Porta (es. 192.168.1.10:3306)" : "Istanza MSSQL"}</Label>
+                <Input
+                  placeholder={(server.engine ?? "mssql") === "mysql" ? "es. 192.168.1.10:3306" : "es. localhost, 192.168.1.10\\SQLEXPRESS"}
+                  value={form.mssql_instance}
+                  onChange={e => setForm(f => ({ ...f, mssql_instance: e.target.value }))}
+                />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1.5">
                   <Label>Username</Label>
-                  <Input placeholder="sa o vuoto per Win auth" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} />
+                  <Input
+                    placeholder={(server.engine ?? "mssql") === "mysql" ? "root" : "sa o vuoto per Win auth"}
+                    value={form.username}
+                    onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Password</Label>
@@ -371,7 +392,7 @@ export default function Servers() {
   const [showAdd, setShowAdd] = useState(false)
   const [showInstall, setShowInstall] = useState<Server | null>(null)
   const [showDbs, setShowDbs] = useState<Server | null>(null)
-  const [form, setForm] = useState({ name: "", hostname: "" })
+  const [form, setForm] = useState({ name: "", hostname: "", engine: "mssql" })
   const [error, setError] = useState("")
 
   const { data: servers = [], isLoading } = useQuery<Server[]>({
@@ -385,7 +406,7 @@ export default function Servers() {
       qc.invalidateQueries({ queryKey: ["servers"] })
       setShowInstall(res.data)
       setShowAdd(false)
-      setForm({ name: "", hostname: "" })
+      setForm({ name: "", hostname: "", engine: "mssql" })
       setError("")
     },
     onError: () => setError("Errore durante la creazione del server"),
@@ -402,10 +423,10 @@ export default function Servers() {
   })
 
   const [showEdit, setShowEdit] = useState<Server | null>(null)
-  const [editForm, setEditForm] = useState({ name: "", hostname: "" })
+  const [editForm, setEditForm] = useState({ name: "", hostname: "", engine: "mssql" })
 
   const editMutation = useMutation({
-    mutationFn: ({ id, ...data }: { id: string; name: string; hostname: string }) =>
+    mutationFn: ({ id, ...data }: { id: string; name: string; hostname: string; engine: string }) =>
       api.patch(`/servers/${id}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["servers"] })
@@ -455,6 +476,9 @@ export default function Servers() {
                       <div className="flex items-center gap-2">
                         <span className="font-semibold">{server.name}</span>
                         <StatusBadge status={server.status} />
+                        <Badge variant="secondary" className="text-xs">
+                          {(server.engine ?? "mssql") === "mysql" ? "MySQL" : "MSSQL"}
+                        </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">{server.hostname}</p>
                       {server.agent_version && (
@@ -468,7 +492,7 @@ export default function Servers() {
                     </Button>
                     <Button variant="ghost" size="icon" title="Modifica" onClick={() => {
                       setShowEdit(server)
-                      setEditForm({ name: server.name, hostname: server.hostname })
+                      setEditForm({ name: server.name, hostname: server.hostname, engine: server.engine ?? "mssql" })
                     }}>
                       <Pencil className="h-4 w-4" />
                     </Button>
@@ -505,6 +529,21 @@ export default function Servers() {
             <div className="space-y-1.5">
               <Label>Hostname / IP</Label>
               <Input placeholder="es. 192.168.1.100 o db.azienda.it" value={form.hostname} onChange={e => setForm(f => ({ ...f, hostname: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="engine">Tipo database</Label>
+              <Select
+                value={form.engine ?? "mssql"}
+                onValueChange={(v) => setForm((f) => ({ ...f, engine: v }))}
+              >
+                <SelectTrigger id="engine">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mssql">SQL Server (MSSQL)</SelectItem>
+                  <SelectItem value="mysql">MySQL / MariaDB</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
@@ -568,6 +607,21 @@ export default function Servers() {
             <div className="space-y-1.5">
               <Label>Hostname / IP</Label>
               <Input value={editForm.hostname} onChange={e => setEditForm(f => ({ ...f, hostname: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Tipo database</Label>
+              <Select
+                value={editForm.engine ?? "mssql"}
+                onValueChange={(v) => setEditForm((f: typeof editForm) => ({ ...f, engine: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mssql">SQL Server (MSSQL)</SelectItem>
+                  <SelectItem value="mysql">MySQL / MariaDB</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>
