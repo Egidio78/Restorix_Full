@@ -241,7 +241,8 @@ def cleanup_scheduler():
     from sqlalchemy import select
 
     async def _scan():
-        now = datetime.utcnow()
+        # Fix #9: use timezone-aware datetime consistently
+        now = datetime.now(timezone.utc).replace(tzinfo=None)  # croniter needs naive
         window_start = now - timedelta(minutes=5)
         enqueued = []
         async with AsyncSessionLocal() as db:

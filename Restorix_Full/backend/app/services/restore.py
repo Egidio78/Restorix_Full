@@ -234,7 +234,8 @@ class RestoreService:
                 password = decrypt_str(run.job.encryption_password_enc)
                 decrypt_file_aesgcm(encrypted_local, final_path, password)
             finally:
-                if final_path != encrypted_local and final_path.exists():
+                # Fix #7: always cleanup encrypted temp file, even if decrypt fails
+                if final_path != encrypted_local:
                     self._cleanup(encrypted_local)
         t1 = perf_counter()
 

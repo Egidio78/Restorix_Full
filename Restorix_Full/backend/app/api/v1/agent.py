@@ -3,7 +3,9 @@ import json
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+import re
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from app.database import get_db
 from app.models.server import Server, AgentStatus
@@ -27,6 +29,9 @@ async def get_server_by_token(
     if not server:
         raise HTTPException(status_code=401, detail="Invalid agent token")
     return server
+
+
+_FILE_PATH_RE = re.compile(r'^[A-Za-z0-9/_\-\.]+$')
 
 
 class RunReport(BaseModel):
@@ -62,14 +67,21 @@ async def get_pending_jobs(
     server.status = AgentStatus.online
     db.add(server)
 
+    # Fix #2: SELECT FOR UPDATE SKIP LOCKED prevents two workers delivering same run
+    # Fix #3: selectinload eliminates N+1 queries (1 query instead of up to 16)
     result = await db.execute(
         select(BackupRun)
         .join(BackupJob, BackupRun.job_id == BackupJob.id)
+        .options(
+            selectinload(BackupRun.job).selectinload(BackupJob.storage_destination),
+            selectinload(BackupRun.job).selectinload(BackupJob.db_instance),
+        )
         .where(
             BackupJob.server_id == server.id,
             BackupRun.status == RunStatus.pending,
         )
         .limit(5)
+        .with_for_update(skip_locked=True)
     )
     runs = result.scalars().all()
 
@@ -79,14 +91,12 @@ async def get_pending_jobs(
 
     jobs_payload = []
     for run in runs:
-        job = await db.get(BackupJob, run.job_id)
+        job = run.job
         if not job:
             continue
 
-        dbi = None
-        if job.db_instance_id:
-            dbi = await db.get(DbInstance, job.db_instance_id)
-        storage = await db.get(StorageDestination, job.storage_destination_id)
+        dbi = job.db_instance
+        storage = job.storage_destination
 
         if not storage:
             continue
@@ -157,6 +167,15 @@ async def report_run(
     job = await db.get(BackupJob, run.job_id)
     if not job or job.server_id != server.id:
         raise HTTPException(status_code=403, detail="Run does not belong to this server")
+
+    # Fix #5: only accept reports for runs that are actually running
+    if run.status != RunStatus.running:
+        raise HTTPException(status_code=409, detail=f"Run is in state '{run.status}', expected 'running'")
+
+    # Fix #4: validate file_path to prevent path traversal
+    if payload.file_path is not None:
+        if not _FILE_PATH_RE.match(payload.file_path) or ".." in payload.file_path:
+            raise HTTPException(status_code=400, detail="Invalid file_path")
 
     run.status = RunStatus.success if payload.status == "success" else RunStatus.failed
     run.finished_at = datetime.now(timezone.utc)

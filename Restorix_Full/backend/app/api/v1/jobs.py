@@ -13,6 +13,12 @@ from app.models.user import User
 from app.schemas.backup import BackupJobCreate, BackupJobUpdate, BackupJobOut, BackupRunOut
 from app.api.deps import get_current_user
 from app.core.encryption import encrypt
+from croniter import croniter as _croniter
+
+
+def _validate_cron(expr: str) -> None:
+    if not _croniter.is_valid(expr):
+        raise HTTPException(status_code=400, detail=f"Invalid cron expression: {expr!r}")
 from app.services.audit import log_event, EventType
 _logger = logging.getLogger(__name__)
 
@@ -59,6 +65,7 @@ async def create_job(
     if not server or server.org_id != _org_id(current_user):
         raise HTTPException(status_code=404, detail="Server not found")
 
+    _validate_cron(payload.schedule_cron)  # Fix #8: validate before saving
     if payload.backup_type == "mssql" and not payload.db_instance_id:
         raise HTTPException(status_code=400, detail="db_instance_id required for MSSQL backup")
     if payload.backup_type == "folder" and not payload.folder_path:
@@ -136,6 +143,7 @@ async def update_job(
     if payload.storage_destination_id is not None:
         job.storage_destination_id = payload.storage_destination_id
     if payload.schedule_cron is not None:
+        _validate_cron(payload.schedule_cron)  # Fix #8: validate on update too
         job.schedule_cron = payload.schedule_cron
     if payload.compression_enabled is not None:
         job.compression_enabled = payload.compression_enabled
