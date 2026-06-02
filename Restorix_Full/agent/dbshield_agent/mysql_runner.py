@@ -25,7 +25,7 @@ def discover_mysql_databases(connection_string: str, username: str, password: st
     """Return list of user database names on the MySQL server."""
     host, port = _parse_host_port(connection_string)
 
-    cmd = ["mysql", "-h", host, "-P", str(port), "--connect-timeout=10"]
+    cmd = ["mysql", "-h", host, "-P", str(port)]
     if username:
         cmd += ["-u", username, f"-p{password}"]
     cmd += ["--batch", "--skip-column-names", "-e", "SHOW DATABASES;"]
@@ -68,7 +68,6 @@ def create_mysql_backup(
         "--single-transaction",
         "--routines",
         "--triggers",
-        "--connect-timeout=10",
     ]
     if username:
         dump_cmd += ["-u", username, f"-p{password}"]
