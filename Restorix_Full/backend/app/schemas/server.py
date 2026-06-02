@@ -22,7 +22,7 @@ class ServerOut(BaseModel):
 
 class DbInstanceCreate(BaseModel):
     name: str
-    mssql_instance: str
+    connection_string: str
     username: str | None = None
     password: str | None = None
 
@@ -31,7 +31,7 @@ class DbInstanceOut(BaseModel):
     id: uuid.UUID
     server_id: uuid.UUID
     name: str
-    mssql_instance: str
+    connection_string: str
     is_active: bool
 
     model_config = {"from_attributes": True}

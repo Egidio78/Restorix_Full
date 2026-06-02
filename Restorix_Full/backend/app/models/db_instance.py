@@ -15,7 +15,7 @@ class DbInstance(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("servers.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    mssql_instance: Mapped[str] = mapped_column(String(255), nullable=False)
+    connection_string: Mapped[str] = mapped_column(String(255), nullable=False)
     credentials_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
 

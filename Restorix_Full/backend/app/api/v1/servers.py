@@ -264,7 +264,7 @@ async def create_database(
     dbi = DbInstance(
         server_id=server_id,
         name=payload.name,
-        mssql_instance=payload.mssql_instance,
+        connection_string=payload.connection_string,
         credentials_enc=credentials,
     )
     db.add(dbi)
@@ -277,7 +277,7 @@ async def create_database(
         event_type=EventType.DBINSTANCE_CREATED,
         target_type="db_instance", target_id=str(dbi.id),
         description=f"Created DB instance {dbi.name} on server {srv.name}",
-        metadata={"name": dbi.name, "server_id": str(server_id), "mssql_instance": dbi.mssql_instance},
+        metadata={"name": dbi.name, "server_id": str(server_id), "connection_string": dbi.connection_string},
         request=request,
     )
 
@@ -286,7 +286,7 @@ async def create_database(
 
 class DbInstanceUpdate(_BaseModel):
     name: str | None = None
-    mssql_instance: str | None = None
+    connection_string: str | None = None
     username: str | None = None
     password: str | None = None
 
@@ -310,8 +310,8 @@ async def update_database(
         raise HTTPException(status_code=404, detail="Database not found")
     if payload.name is not None:
         dbi.name = payload.name
-    if payload.mssql_instance is not None:
-        dbi.mssql_instance = payload.mssql_instance
+    if payload.connection_string is not None:
+        dbi.connection_string = payload.connection_string
     if payload.username is not None or payload.password is not None:
         existing = {}
         if dbi.credentials_enc:
@@ -379,7 +379,7 @@ from app.services import discovery
 
 
 class DiscoverRequest(BaseModel):
-    mssql_instance: str
+    connection_string: str
     username: str | None = ""
     password: str | None = ""
 
@@ -396,7 +396,7 @@ async def start_discovery(
         raise HTTPException(status_code=404, detail="Server not found")
     await discovery.store_request(
         server_id,
-        payload.mssql_instance,
+        payload.connection_string,
         payload.username or "",
         payload.password or "",
     )

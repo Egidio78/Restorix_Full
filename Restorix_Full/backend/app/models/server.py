@@ -24,6 +24,7 @@ class Server(Base, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     hostname: Mapped[str] = mapped_column(String(255), nullable=False)
+    engine: Mapped[str] = mapped_column(String(20), nullable=False, default="mssql")
     agent_token: Mapped[str] = mapped_column(
         String(64), unique=True, nullable=False, index=True,
         default=lambda: secrets.token_hex(32)

@@ -125,7 +125,7 @@ async def get_pending_jobs(
             "job_name": job.name,
             "backup_type": backup_type_value,
             "folder_path": job.folder_path,
-            "mssql_instance": dbi.mssql_instance if dbi else "",
+            "connection_string": dbi.connection_string if dbi else "",
             "db_name": dbi.name if dbi else "",
             "db_username": db_creds.get("username", "") if dbi else "",
             "db_password": db_creds.get("password", "") if dbi else "",
@@ -193,7 +193,7 @@ from app.services import discovery as _discovery
 
 
 class DiscoveryRequestOut(BaseModel):
-    mssql_instance: str
+    connection_string: str
     username: str
     password: str
 

@@ -9,6 +9,7 @@ from app.models.base import Base, TimestampMixin
 class BackupType(str, enum.Enum):
     mssql = "mssql"
     folder = "folder"
+    mysql = "mysql"
 
 
 class BackupJob(Base, TimestampMixin):
