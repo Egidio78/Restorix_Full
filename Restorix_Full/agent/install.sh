@@ -87,6 +87,22 @@ if ! command -v sqlcmd &>/dev/null; then
     warn "  Agent will install but backups will fail until sqlcmd is available."
 fi
 
+# Verifica/installazione mysql client (per backup MySQL)
+if ! command -v mysqldump &>/dev/null; then
+    echo "mysqldump non trovato. Tentativo installazione default-mysql-client..."
+    if command -v apt-get &>/dev/null; then
+        apt-get install -y default-mysql-client 2>/dev/null && echo "mysql-client installato." || \
+            echo "WARNING: impossibile installare mysql-client. I backup MySQL falliranno."
+    elif command -v yum &>/dev/null; then
+        yum install -y mysql 2>/dev/null && echo "mysql installato." || \
+            echo "WARNING: impossibile installare mysql. I backup MySQL falliranno."
+    else
+        echo "WARNING: mysqldump non trovato. I backup MySQL falliranno."
+    fi
+else
+    echo "mysqldump trovato: $(which mysqldump)"
+fi
+
 # Create agent user
 if ! id "${AGENT_USER}" &>/dev/null; then
     info "Creating service user '${AGENT_USER}'..."

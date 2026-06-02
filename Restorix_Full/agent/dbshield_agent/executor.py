@@ -23,10 +23,26 @@ def execute_job(job: dict, config: AgentConfig, client: AgentClient) -> None:
                 raise RuntimeError("folder_path missing for folder backup")
             backup_file = create_folder_backup(folder, config.temp_dir, job.get("job_name", "folder"))
             already_compressed = True
+
+        elif backup_type == "mysql":
+            from dbshield_agent.mysql_runner import create_mysql_backup
+            connection_string = job.get("connection_string", "")
+            if not connection_string:
+                raise RuntimeError("connection_string missing for MySQL backup")
+            backup_file = create_mysql_backup(
+                connection_string=connection_string,
+                db_name=job["db_name"],
+                username=job.get("db_username", ""),
+                password=job.get("db_password", ""),
+                temp_dir=config.temp_dir,
+            )
+            already_compressed = True  # sempre .sql.gz
+
         else:
+            # mssql (default)
             native = job.get("mssql_native_compression", False)
             backup_file = create_backup(
-                mssql_instance=job["mssql_instance"],
+                mssql_instance=job.get("connection_string") or job.get("mssql_instance", ""),
                 db_name=job["db_name"],
                 username=job.get("db_username", ""),
                 password=job.get("db_password", ""),

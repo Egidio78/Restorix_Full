@@ -51,13 +51,20 @@ def main() -> None:
             # Check for discovery request
             discovery_req = client.get_discovery_request()
             if discovery_req:
-                from dbshield_agent.discovery import discover_databases
-                logger.info(f"Discovery request for {discovery_req.get('mssql_instance')}")
-                dbs, err = discover_databases(
-                    discovery_req["mssql_instance"],
-                    discovery_req.get("username", ""),
-                    discovery_req.get("password", ""),
-                )
+                engine = discovery_req.get("engine", "mssql")
+                connection_string = discovery_req.get("connection_string", "") or discovery_req.get("mssql_instance", "")
+                username = discovery_req.get("username", "")
+                password = discovery_req.get("password", "")
+
+                if engine == "mysql":
+                    from dbshield_agent.mysql_runner import discover_mysql_databases
+                    logger.info(f"MySQL discovery request for {connection_string}")
+                    dbs, err = discover_mysql_databases(connection_string, username, password)
+                else:
+                    from dbshield_agent.discovery import discover_databases
+                    logger.info(f"MSSQL discovery request for {connection_string}")
+                    dbs, err = discover_databases(connection_string, username, password)
+
                 if err:
                     logger.error(f"Discovery failed: {err}")
                 else:
