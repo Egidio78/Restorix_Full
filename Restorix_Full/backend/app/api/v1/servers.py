@@ -105,6 +105,7 @@ from pydantic import BaseModel as _BaseModel
 class ServerUpdate(_BaseModel):
     name: str | None = None
     hostname: str | None = None
+    engine: str | None = None
 
 
 @router.patch("/{server_id}", response_model=ServerOut)
@@ -127,6 +128,9 @@ async def update_server(
     if payload.hostname is not None:
         srv.hostname = payload.hostname
         changed.append("hostname")
+    if payload.engine is not None and payload.engine in ("mssql", "mysql"):
+        srv.engine = payload.engine
+        changed.append("engine")
     db.add(srv)
     await db.commit()
     await db.refresh(srv)
