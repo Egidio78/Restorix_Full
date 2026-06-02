@@ -8,10 +8,11 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
-def create_backup(mssql_instance: str, db_name: str, username: str, password: str, temp_dir: str, native_compression: bool = False) -> str:
+def create_backup(mssql_instance: str, db_name: str, username: str, password: str, temp_dir: str, native_compression: bool = False, name_prefix: str = "") -> str:
     os.makedirs(temp_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    bak_file = os.path.join(temp_dir, f"{db_name}_{timestamp}.bak")
+    base = f"{name_prefix}_{db_name}" if name_prefix else db_name
+    bak_file = os.path.join(temp_dir, f"{base}_{timestamp}.bak")
 
     compression_clause = "COMPRESSION, " if native_compression else ""
     tsql = (

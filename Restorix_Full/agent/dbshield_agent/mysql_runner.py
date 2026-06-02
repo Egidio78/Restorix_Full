@@ -52,12 +52,14 @@ def create_mysql_backup(
     username: str,
     password: str,
     temp_dir: str,
+    name_prefix: str = "",
 ) -> str:
     """Run mysqldump | gzip and return path to .sql.gz file."""
     host, port = _parse_host_port(connection_string)
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     safe_name = db_name.replace(" ", "_").replace("/", "_")
-    out_path = os.path.join(temp_dir, f"{safe_name}_{timestamp}.sql.gz")
+    base = f"{name_prefix}_{safe_name}" if name_prefix else safe_name
+    out_path = os.path.join(temp_dir, f"{base}_{timestamp}.sql.gz")
 
     dump_cmd = [
         "mysqldump",

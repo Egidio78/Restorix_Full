@@ -1,6 +1,7 @@
 from __future__ import annotations
 import logging
 import os
+import re
 
 from dbshield_agent.backup import create_backup, sha256_file
 from dbshield_agent.folder_backup import create_folder_backup
@@ -12,9 +13,17 @@ from dbshield_agent.storage import get_uploader
 logger = logging.getLogger(__name__)
 
 
+def _safe_prefix(name: str) -> str:
+    """Sanitize a server name for use in a backup filename."""
+    cleaned = re.sub(r"[^A-Za-z0-9_\-]", "_", name or "")
+    cleaned = re.sub(r"_+", "_", cleaned).strip("_")
+    return cleaned
+
+
 def execute_job(job: dict, config: AgentConfig, client: AgentClient) -> None:
     run_id = job["run_id"]
     backup_type = job.get("backup_type", "mssql")
+    server_prefix = _safe_prefix(job.get("server_name", ""))
     backup_file = None
 
     try:
@@ -36,6 +45,7 @@ def execute_job(job: dict, config: AgentConfig, client: AgentClient) -> None:
                 username=job.get("db_username", ""),
                 password=job.get("db_password", ""),
                 temp_dir=config.temp_dir,
+                name_prefix=server_prefix,
             )
             already_compressed = True  # sempre .sql.gz
 
@@ -49,6 +59,7 @@ def execute_job(job: dict, config: AgentConfig, client: AgentClient) -> None:
                 password=job.get("db_password", ""),
                 temp_dir=config.temp_dir,
                 native_compression=native,
+                name_prefix=server_prefix,
             )
             already_compressed = native
 

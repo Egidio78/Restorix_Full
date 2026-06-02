@@ -133,6 +133,7 @@ async def get_pending_jobs(
             "run_id": str(run.id),
             "job_id": str(job.id),
             "job_name": job.name,
+            "server_name": server.name,
             "backup_type": backup_type_value,
             "folder_path": job.folder_path,
             "connection_string": dbi.connection_string if dbi else "",
