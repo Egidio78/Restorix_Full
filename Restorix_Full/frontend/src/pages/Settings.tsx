@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { User, Building2, Mail, Webhook, Shield, Save, Plus, Trash2, FolderCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -34,7 +34,6 @@ type TabKey = "profile" | "security" | "organization" | "notifications"
 export default function Settings() {
   const { user } = useAuth()
   const [tab, setTab] = useState<TabKey>("profile")
-  const isSuperadmin = user?.role === "superadmin"
 
   const tabs: { key: TabKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { key: "profile", label: "Profilo", icon: User },
