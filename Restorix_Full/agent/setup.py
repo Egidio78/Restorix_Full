@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="dbshield-agent",
+    name="restorix-agent",
     version="1.0.0",
     packages=find_packages(),
     install_requires=[
@@ -9,10 +9,11 @@ setup(
         "boto3>=1.34.0",
         "paramiko>=3.4.0",
         "cryptography>=42.0.7",
+        "pymysql>=1.1.0",
     ],
     entry_points={
         "console_scripts": [
-            "dbshield-agent=dbshield_agent.main:main",
+            "restorix-agent=dbshield_agent.main:main",
         ],
     },
 )

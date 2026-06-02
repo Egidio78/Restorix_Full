@@ -22,28 +22,26 @@ def _parse_host_port(connection_string: str) -> tuple[str, int]:
 
 
 def discover_mysql_databases(connection_string: str, username: str, password: str) -> tuple[list[str], str | None]:
-    """Return list of user database names on the MySQL server."""
+    """Return list of user database names using pymysql (no CLI dependency)."""
     host, port = _parse_host_port(connection_string)
-
-    cmd = ["mysql", "-h", host, "-P", str(port)]
-    if username:
-        cmd += ["-u", username, f"-p{password}"]
-    cmd += ["--batch", "--skip-column-names", "-e", "SHOW DATABASES;"]
-
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        if result.returncode != 0:
-            return [], f"mysql failed: {result.stderr.strip() or result.stdout.strip()}"
-        databases = [
-            line.strip()
-            for line in result.stdout.splitlines()
-            if line.strip() and line.strip().lower() not in _SYSTEM_DBS
-        ]
+        import pymysql  # type: ignore
+        conn = pymysql.connect(
+            host=host, port=port,
+            user=username or "root",
+            password=password or "",
+            connect_timeout=10,
+        )
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute("SHOW DATABASES")
+                databases = [
+                    row[0] for row in cur.fetchall()
+                    if row[0].lower() not in _SYSTEM_DBS
+                ]
         return databases, None
-    except FileNotFoundError:
-        return [], "mysql client not installed on this server"
-    except subprocess.TimeoutExpired:
-        return [], "mysql discovery timed out (30s)"
+    except ImportError:
+        return [], "pymysql not installed — run: pip install pymysql"
     except Exception as e:
         return [], f"Discovery error: {e}"
 
