@@ -55,6 +55,92 @@ class OrgInfo(BaseModel):
     user_count: int
 
 
+# Organization routes — must be defined BEFORE /{user_id} to avoid route conflict
+
+class OrgUpdate(BaseModel):
+    name: str | None = None
+    require_2fa: bool | None = None
+
+
+@router.get("/org/info", response_model=OrgInfo)
+async def get_org_info(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get current organization info."""
+    org = await db.get(Organization, current_user.org_id)
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    count_result = await db.execute(
+        select(User).where(User.org_id == org.id, User.is_active == True)
+    )
+    user_count = len(count_result.scalars().all())
+    return OrgInfo(
+        id=org.id,
+        name=org.name,
+        plan=org.plan.value if hasattr(org.plan, "value") else str(org.plan),
+        require_2fa=org.require_2fa,
+        user_count=user_count,
+    )
+
+
+@router.patch("/org", response_model=OrgInfo)
+async def update_org(
+    payload: OrgUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update organization name / 2FA requirement. SuperAdmin and Admin only."""
+    if current_user.role not in (UserRole.superadmin, UserRole.admin):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    org = await db.get(Organization, current_user.org_id)
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    if payload.name is not None:
+        org.name = payload.name
+    if payload.require_2fa is not None:
+        org.require_2fa = payload.require_2fa
+    db.add(org)
+    await db.commit()
+    await db.refresh(org)
+    count_result = await db.execute(
+        select(User).where(User.org_id == org.id, User.is_active == True)
+    )
+    user_count = len(count_result.scalars().all())
+    return OrgInfo(
+        id=org.id,
+        name=org.name,
+        plan=org.plan.value if hasattr(org.plan, "value") else str(org.plan),
+        require_2fa=org.require_2fa,
+        user_count=user_count,
+    )
+
+
+@router.post("/me/change-password")
+async def change_password_early(
+    payload: PasswordChange,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Alias: defined early to avoid /{user_id} conflict."""
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+    current_user.password_hash = hash_password(payload.new_password)
+    db.add(current_user)
+    await db.commit()
+    await _safe_audit(
+        db,
+        org_id=current_user.org_id, user_id=current_user.id,
+        event_type=EventType.AUTH_PASSWORD_CHANGED,
+        description="Password changed",
+        request=request,
+    )
+    return {"message": "Password changed successfully"}
+
+
 # User listing & management
 
 @router.get("/", response_model=list[UserOut])
