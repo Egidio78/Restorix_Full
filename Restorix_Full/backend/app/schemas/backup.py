@@ -41,6 +41,7 @@ class BackupJobOut(BaseModel):
     server_id: uuid.UUID
     backup_type: BackupType
     db_instance_id: uuid.UUID | None
+    database_name: str | None = None
     folder_path: str | None
     storage_destination_id: uuid.UUID
     schedule_cron: str

@@ -57,10 +57,12 @@ async def create_server(
     if current_user.role not in ("superadmin", "admin", "operator"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
+    engine = payload.engine if payload.engine in ("mssql", "mysql") else "mssql"
     server = Server(
         org_id=_get_org_id(current_user),
         name=payload.name,
         hostname=payload.hostname,
+        engine=engine,
         agent_token=secrets.token_hex(32),
     )
     db.add(server)

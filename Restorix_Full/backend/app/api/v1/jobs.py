@@ -45,6 +45,7 @@ async def list_jobs(
 ):
     result = await db.execute(
         select(BackupJob)
+        .options(selectinload(BackupJob.db_instance))
         .where(BackupJob.org_id == _org_id(current_user))
         .order_by(BackupJob.created_at.desc())
     )
@@ -114,7 +115,12 @@ async def get_job(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    job = await db.get(BackupJob, job_id)
+    result = await db.execute(
+        select(BackupJob)
+        .options(selectinload(BackupJob.db_instance))
+        .where(BackupJob.id == job_id)
+    )
+    job = result.scalar_one_or_none()
     if not job or job.org_id != _org_id(current_user):
         raise HTTPException(status_code=404, detail="Job not found")
     return job

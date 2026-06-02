@@ -6,6 +6,7 @@ from app.models.server import AgentStatus
 class ServerCreate(BaseModel):
     name: str
     hostname: str
+    engine: str = "mssql"
 
 
 class ServerOut(BaseModel):

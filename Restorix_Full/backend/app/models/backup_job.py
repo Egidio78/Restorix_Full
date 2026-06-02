@@ -53,3 +53,12 @@ class BackupJob(Base, TimestampMixin):
     runs: Mapped[list["BackupRun"]] = relationship(
         "BackupRun", back_populates="job", cascade="all, delete-orphan"
     )
+
+    @property
+    def database_name(self) -> str | None:
+        """Name of the linked DbInstance, or None. Safe: returns None if the
+        relationship was not eager-loaded (avoids async lazy-load errors)."""
+        from sqlalchemy import inspect as _sa_inspect
+        if "db_instance" in _sa_inspect(self).unloaded:
+            return None
+        return self.db_instance.name if self.db_instance else None

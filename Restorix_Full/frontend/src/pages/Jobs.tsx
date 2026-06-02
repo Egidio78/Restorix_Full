@@ -16,6 +16,7 @@ interface BackupJob {
   server_id: string
   backup_type: "mssql" | "mysql" | "folder"
   db_instance_id: string | null
+  database_name: string | null
   folder_path: string | null
   storage_destination_id: string
   schedule_cron: string
@@ -250,7 +251,7 @@ export default function Jobs() {
                           <code className="text-xs">{job.folder_path}</code>
                         </span>
                       ) : (
-                        <span>DB: {getDbName(job.db_instance_id)}</span>
+                        <span>DB: {job.database_name ?? getDbName(job.db_instance_id)}</span>
                       )}
                       {job.backup_type === "mysql" && (
                         <span className="text-xs text-muted-foreground/70">.sql.gz</span>
