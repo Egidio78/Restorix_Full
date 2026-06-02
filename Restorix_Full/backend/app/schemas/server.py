@@ -12,6 +12,7 @@ class ServerOut(BaseModel):
     id: uuid.UUID
     name: str
     hostname: str
+    engine: str = "mssql"
     agent_token: str
     agent_version: str | None
     status: AgentStatus
