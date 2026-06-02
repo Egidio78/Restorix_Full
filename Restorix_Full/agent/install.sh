@@ -83,9 +83,15 @@ install_python() {
             apt-get update -qq
             apt-get install -y -qq software-properties-common
             add-apt-repository -y ppa:deadsnakes/ppa
-            apt-get update -qq
-            apt-get install -y -qq python3.11 python3.11-venv python3.11-distutils
-            PYTHON_CMD="python3.11"
+            # No -qq here: sopprimere l'output nasconde errori di scaricamento indici
+            apt-get update -y
+            if apt-get install -y python3.11 python3.11-venv python3.11-distutils 2>/dev/null; then
+                PYTHON_CMD="python3.11"
+            elif apt-get install -y python3.10 python3.10-venv python3.10-distutils 2>/dev/null; then
+                PYTHON_CMD="python3.10"
+            else
+                error "Impossibile installare Python 3.10 o 3.11 dal PPA deadsnakes. Installa manualmente e ri-esegui."
+            fi
             ;;
         centos|rhel|rocky|almalinux)
             yum install -y python3.11 python3.11-pip 2>/dev/null || \
