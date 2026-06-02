@@ -27,7 +27,7 @@ interface BackupJob {
 }
 
 interface Server { id: string; name: string; hostname: string; engine?: string }
-interface DbInstance { id: string; name: string; mssql_instance: string }
+interface DbInstance { id: string; name: string; connection_string: string }
 interface StorageDest { id: string; name: string; storage_type: string }
 
 const CRON_PRESETS = [
@@ -300,7 +300,13 @@ export default function Jobs() {
             </div>
             <div className="space-y-1.5">
               <Label>Server</Label>
-              <Select value={selectedServer} onValueChange={v => { setSelectedServer(v); setForm(f => ({ ...f, db_instance_id: "" })) }}>
+              <Select value={selectedServer} onValueChange={v => {
+                setSelectedServer(v)
+                setForm(f => ({ ...f, db_instance_id: "" }))
+                // Auto-set backup type based on server engine
+                const engine = servers.find(s => s.id === v)?.engine ?? "mssql"
+                setBackupType(engine === "mysql" ? "mysql" : "mssql")
+              }}>
                 <SelectTrigger><SelectValue placeholder="Seleziona server..." /></SelectTrigger>
                 <SelectContent>
                   {servers.map(s => <SelectItem key={s.id} value={s.id}>{s.name} ({s.hostname})</SelectItem>)}
@@ -333,7 +339,7 @@ export default function Jobs() {
                     <SelectValue placeholder={selectedServer ? (dbInstances.length === 0 ? "Nessun DB configurato" : "Seleziona database...") : "Prima seleziona un server"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {dbInstances.map(d => <SelectItem key={d.id} value={d.id}>{d.name} ({d.mssql_instance})</SelectItem>)}
+                    {dbInstances.map(d => <SelectItem key={d.id} value={d.id}>{d.name} ({d.connection_string})</SelectItem>)}
                   </SelectContent>
                 </Select>
                 {backupType === "mysql" && (
@@ -437,7 +443,7 @@ export default function Jobs() {
                   <Select value={editForm.db_instance_id ?? ""} onValueChange={v => setEditForm((f: any) => ({ ...f, db_instance_id: v }))}>
                     <SelectTrigger><SelectValue placeholder="Seleziona database..." /></SelectTrigger>
                     <SelectContent>
-                      {editDbInstances.map(d => <SelectItem key={d.id} value={d.id}>{d.name} ({d.mssql_instance})</SelectItem>)}
+                      {editDbInstances.map(d => <SelectItem key={d.id} value={d.id}>{d.name} ({d.connection_string})</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
