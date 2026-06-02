@@ -10,7 +10,6 @@ import Users from '@/pages/Users'
 import Settings from '@/pages/Settings'
 import AuditPage from '@/pages/Audit'
 import RestoreHubPage from '@/pages/RestoreHub'
-import LockedPage from '@/pages/Locked'
 import AppLayout from '@/components/layout/AppLayout'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -31,15 +30,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route
-          path="/locked"
-          element={
-            <ProtectedRoute>
-              <LockedPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
+<Route
           path="/"
           element={
             <ProtectedRoute>
