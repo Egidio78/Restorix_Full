@@ -196,6 +196,7 @@ class DiscoveryRequestOut(BaseModel):
     connection_string: str
     username: str
     password: str
+    engine: str = "mssql"
 
 
 class DiscoveryReportPayload(BaseModel):

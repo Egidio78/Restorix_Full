@@ -399,6 +399,7 @@ async def start_discovery(
         payload.connection_string,
         payload.username or "",
         payload.password or "",
+        engine=srv.engine if srv.engine else "mssql",
     )
     return {"status": "queued"}
 

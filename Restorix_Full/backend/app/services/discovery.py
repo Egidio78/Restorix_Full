@@ -15,12 +15,13 @@ async def _redis_client():
     return await aioredis.from_url(settings.redis_url, decode_responses=True)
 
 
-async def store_request(server_id: uuid.UUID, connection_string: str, username: str, password: str) -> None:
+async def store_request(server_id: uuid.UUID, connection_string: str, username: str, password: str, engine: str = "mssql") -> None:
     r = await _redis_client()
     payload = encrypt(json.dumps({
         "connection_string": connection_string,
         "username": username,
         "password": password,
+        "engine": engine,
     }))
     await r.setex(f"{REQUEST_KEY_PREFIX}{server_id}", TTL_SECONDS, payload)
     await r.delete(f"{RESULT_KEY_PREFIX}{server_id}")
