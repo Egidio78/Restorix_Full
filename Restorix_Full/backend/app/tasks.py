@@ -226,7 +226,6 @@ def _send_webhook(config: dict, run, job, is_success: bool):
 # ============================================================
 # Piano 5a — Retention cleanup tasks
 # ============================================================
-from app.services.retention import RetentionService
 
 
 @celery_app.task(name="app.tasks.cleanup_scheduler")
@@ -338,6 +337,7 @@ def cleanup_org_runs(self, org_id: str):
     from uuid import UUID
 
     async def _run():
+        from app.services.retention import RetentionService
         async with AsyncSessionLocal() as db:
             service = RetentionService(db)
             report = await service.purge_org(UUID(org_id), dry_run=False)
