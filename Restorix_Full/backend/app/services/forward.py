@@ -51,7 +51,8 @@ class ForwardService:
         uploader = get_uploader(target_type_str, target_config)
 
         # Temp file under org's restore_temp_dir
-        org = source_run.job.organization
+        from app.models.organization import Organization as _Org
+        org = await self.db.get(_Org, source_run.job.org_id)
         temp_base = Path(org.restore_temp_dir or "/var/lib/dbshield/restore-tmp")
         temp_base.mkdir(parents=True, exist_ok=True)
         temp_file = temp_base / f"forward-{uuid_lib.uuid4().hex}.tmp"

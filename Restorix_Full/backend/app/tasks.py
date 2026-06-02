@@ -282,7 +282,6 @@ def forward_run_to_storage(self, shadow_run_id: str, source_run_id: str,
                 select(BackupRun)
                 .options(
                     selectinload(BackupRun.job).selectinload(BackupJob.storage_destination),
-                    selectinload(BackupRun.job).selectinload(BackupJob.organization),
                 )
                 .where(BackupRun.id == UUID(source_run_id))
             )).scalar_one()

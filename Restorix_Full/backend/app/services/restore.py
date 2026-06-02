@@ -104,7 +104,8 @@ class RestoreService:
             return RedirectResponse(url=url, status_code=302)
 
         # CASE B: streaming proxy
-        org = run.job.organization
+        from app.models.organization import Organization as _Org
+        org = await self.db.get(_Org, run.job.org_id)
         temp_dir = self._validate_temp_dir(
             getattr(org, "restore_temp_dir", None) or DEFAULT_TEMP_DIR
         )
@@ -183,7 +184,8 @@ class RestoreService:
         storage_type = sd.storage_type
         storage_type_str = storage_type.value if hasattr(storage_type, "value") else storage_type
 
-        org = run.job.organization
+        from app.models.organization import Organization as _Org
+        org = await self.db.get(_Org, run.job.org_id)
         base_temp = self._validate_temp_dir(
             getattr(org, "restore_temp_dir", None) or DEFAULT_TEMP_DIR
         )
