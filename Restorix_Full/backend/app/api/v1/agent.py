@@ -101,8 +101,8 @@ async def get_pending_jobs(
         if not storage:
             continue
         backup_type_value = job.backup_type.value if hasattr(job.backup_type, "value") else str(job.backup_type)
-        if backup_type_value == "mssql" and not dbi:
-            continue
+        if backup_type_value in ("mssql", "mysql") and not dbi:
+            continue  # skip DB jobs without a linked database instance
 
         db_creds = {}
         if dbi and dbi.credentials_enc:

@@ -66,8 +66,8 @@ async def create_job(
         raise HTTPException(status_code=404, detail="Server not found")
 
     _validate_cron(payload.schedule_cron)  # Fix #8: validate before saving
-    if payload.backup_type == "mssql" and not payload.db_instance_id:
-        raise HTTPException(status_code=400, detail="db_instance_id required for MSSQL backup")
+    if payload.backup_type in ("mssql", "mysql") and not payload.db_instance_id:
+        raise HTTPException(status_code=400, detail="db_instance_id required for database backup")
     if payload.backup_type == "folder" and not payload.folder_path:
         raise HTTPException(status_code=400, detail="folder_path required for folder backup")
 
@@ -79,7 +79,7 @@ async def create_job(
         org_id=_org_id(current_user),
         server_id=payload.server_id,
         backup_type=payload.backup_type,
-        db_instance_id=payload.db_instance_id if payload.backup_type == "mssql" else None,
+        db_instance_id=payload.db_instance_id if payload.backup_type in ("mssql", "mysql") else None,
         folder_path=payload.folder_path if payload.backup_type == "folder" else None,
         storage_destination_id=payload.storage_destination_id,
         name=payload.name,
