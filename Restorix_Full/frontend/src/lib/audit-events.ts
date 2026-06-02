@@ -1,0 +1,61 @@
+export interface AuditEventDef {
+  value: string;
+  label: string;
+  category: 'auth' | 'user' | 'server' | 'storage' | 'job' | 'run' | 'restore' | 'system' | 'org';
+}
+
+export const AUDIT_EVENT_TYPES: AuditEventDef[] = [
+  { value: 'auth.login.success', label: 'Login OK', category: 'auth' },
+  { value: 'auth.login.failed', label: 'Login fallito', category: 'auth' },
+  { value: 'auth.logout', label: 'Logout', category: 'auth' },
+  { value: 'auth.password.changed', label: 'Password cambiata', category: 'auth' },
+  { value: 'auth.2fa.enabled', label: '2FA abilitato', category: 'auth' },
+  { value: 'auth.2fa.disabled', label: '2FA disabilitato', category: 'auth' },
+  { value: 'auth.2fa.backup_codes.regenerated', label: '2FA backup codes', category: 'auth' },
+  { value: 'user.created', label: 'Utente creato', category: 'user' },
+  { value: 'user.updated', label: 'Utente modificato', category: 'user' },
+  { value: 'user.deactivated', label: 'Utente disattivato', category: 'user' },
+  { value: 'user.role.changed', label: 'Ruolo cambiato', category: 'user' },
+  { value: 'server.created', label: 'Server creato', category: 'server' },
+  { value: 'server.updated', label: 'Server modificato', category: 'server' },
+  { value: 'server.deleted', label: 'Server eliminato', category: 'server' },
+  { value: 'server.agent.token.regenerated', label: 'Token agente rigenerato', category: 'server' },
+  { value: 'dbinstance.created', label: 'Database creato', category: 'server' },
+  { value: 'dbinstance.updated', label: 'Database modificato', category: 'server' },
+  { value: 'dbinstance.deleted', label: 'Database eliminato', category: 'server' },
+  { value: 'storage.created', label: 'Storage creato', category: 'storage' },
+  { value: 'storage.updated', label: 'Storage modificato', category: 'storage' },
+  { value: 'storage.deleted', label: 'Storage eliminato', category: 'storage' },
+  { value: 'storage.tested', label: 'Storage testato', category: 'storage' },
+  { value: 'job.created', label: 'Job creato', category: 'job' },
+  { value: 'job.updated', label: 'Job modificato', category: 'job' },
+  { value: 'job.deleted', label: 'Job eliminato', category: 'job' },
+  { value: 'job.triggered.manual', label: 'Backup ora', category: 'job' },
+  { value: 'run.deleted', label: 'Run eliminato', category: 'run' },
+  { value: 'run.deleted.bulk', label: 'Run eliminati in blocco', category: 'run' },
+  { value: 'run.forwarded', label: 'Backup spostato/copiato', category: 'run' },
+  { value: 'restore.requested', label: 'Restore richiesto', category: 'restore' },
+  { value: 'restore.downloaded', label: 'Restore scaricato', category: 'restore' },
+  { value: 'restore.failed.disk_full', label: 'Restore disk full', category: 'restore' },
+  { value: 'restore.failed.unauthorized', label: 'Restore non autorizzato', category: 'restore' },
+  { value: 'restore.temp_folder.deleted', label: 'Cartella temp eliminata', category: 'restore' },
+  { value: 'restore.sent_to_temp', label: 'Backup inviato al server', category: 'restore' },
+  { value: 'retention.purged', label: 'Purge eseguito', category: 'system' },
+  { value: 'retention.purge.failed', label: 'Purge fallito', category: 'system' },
+  { value: 'retention.purge.abandoned', label: 'Purge abbandonato', category: 'system' },
+  { value: 'audit.purged', label: 'Audit log puliti', category: 'system' },
+  { value: 'org.settings.updated', label: 'Impostazioni org modificate', category: 'org' },
+  { value: 'org.settings.tempdir.verified', label: 'Tempdir verificata', category: 'org' },
+];
+
+export const CATEGORY_COLORS: Record<string, string> = {
+  auth: 'bg-blue-100 text-blue-800',
+  user: 'bg-purple-100 text-purple-800',
+  server: 'bg-green-100 text-green-800',
+  storage: 'bg-cyan-100 text-cyan-800',
+  job: 'bg-amber-100 text-amber-800',
+  run: 'bg-orange-100 text-orange-800',
+  restore: 'bg-rose-100 text-rose-800',
+  system: 'bg-gray-100 text-gray-800',
+  org: 'bg-indigo-100 text-indigo-800',
+};

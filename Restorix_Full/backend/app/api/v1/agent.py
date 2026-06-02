@@ -1,0 +1,225 @@
+import uuid
+import json
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from pydantic import BaseModel
+from app.database import get_db
+from app.models.server import Server, AgentStatus
+from app.models.backup_job import BackupJob
+from app.models.backup_run import BackupRun, RunStatus
+from app.models.db_instance import DbInstance
+from app.models.storage import StorageDestination
+from app.core.encryption import decrypt
+
+router = APIRouter()
+
+
+async def get_server_by_token(
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+) -> Server:
+    result = await db.execute(
+        select(Server).where(Server.agent_token == token, Server.is_active == True)
+    )
+    server = result.scalar_one_or_none()
+    if not server:
+        raise HTTPException(status_code=401, detail="Invalid agent token")
+    return server
+
+
+class RunReport(BaseModel):
+    status: str  # "success" | "failed"
+    size_bytes: int | None = None
+    file_path: str | None = None
+    checksum_sha256: str | None = None
+    error_message: str | None = None
+    agent_version: str | None = None
+
+
+@router.post("/heartbeat")
+async def heartbeat(
+    agent_version: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    server: Server = Depends(get_server_by_token),
+):
+    """Agent calls this every 30s to signal its alive."""
+    server.status = AgentStatus.online
+    if agent_version:
+        server.agent_version = agent_version
+    db.add(server)
+    await db.commit()
+    return {"status": "ok", "server_id": str(server.id)}
+
+
+@router.get("/jobs")
+async def get_pending_jobs(
+    db: AsyncSession = Depends(get_db),
+    server: Server = Depends(get_server_by_token),
+):
+    """Returns pending BackupRun records for this server with full job config."""
+    server.status = AgentStatus.online
+    db.add(server)
+
+    result = await db.execute(
+        select(BackupRun)
+        .join(BackupJob, BackupRun.job_id == BackupJob.id)
+        .where(
+            BackupJob.server_id == server.id,
+            BackupRun.status == RunStatus.pending,
+        )
+        .limit(5)
+    )
+    runs = result.scalars().all()
+
+    if not runs:
+        await db.commit()
+        return []
+
+    jobs_payload = []
+    for run in runs:
+        job = await db.get(BackupJob, run.job_id)
+        if not job:
+            continue
+
+        dbi = None
+        if job.db_instance_id:
+            dbi = await db.get(DbInstance, job.db_instance_id)
+        storage = await db.get(StorageDestination, job.storage_destination_id)
+
+        if not storage:
+            continue
+        backup_type_value = job.backup_type.value if hasattr(job.backup_type, "value") else str(job.backup_type)
+        if backup_type_value == "mssql" and not dbi:
+            continue
+
+        db_creds = {}
+        if dbi and dbi.credentials_enc:
+            try:
+                db_creds = json.loads(decrypt(dbi.credentials_enc))
+            except Exception:
+                pass
+
+        storage_config = {}
+        if storage.config_enc:
+            try:
+                storage_config = json.loads(decrypt(storage.config_enc))
+            except Exception:
+                pass
+
+        enc_password = None
+        if job.encryption_enabled and job.encryption_password_enc:
+            try:
+                enc_password = decrypt(job.encryption_password_enc)
+            except Exception:
+                pass
+
+        run.status = RunStatus.running
+        run.started_at = datetime.now(timezone.utc)
+        db.add(run)
+
+        jobs_payload.append({
+            "run_id": str(run.id),
+            "job_id": str(job.id),
+            "job_name": job.name,
+            "backup_type": backup_type_value,
+            "folder_path": job.folder_path,
+            "mssql_instance": dbi.mssql_instance if dbi else "",
+            "db_name": dbi.name if dbi else "",
+            "db_username": db_creds.get("username", "") if dbi else "",
+            "db_password": db_creds.get("password", "") if dbi else "",
+            "storage_type": storage.storage_type,
+            "storage_config": storage_config,
+            "compression_enabled": job.compression_enabled,
+            "mssql_native_compression": job.mssql_native_compression,
+            "encryption_enabled": job.encryption_enabled,
+            "encryption_password": enc_password,
+            "retention_days": job.retention_days,
+        })
+
+    await db.commit()
+    return jobs_payload
+
+
+@router.post("/runs/{run_id}")
+async def report_run(
+    run_id: uuid.UUID,
+    payload: RunReport,
+    db: AsyncSession = Depends(get_db),
+    server: Server = Depends(get_server_by_token),
+):
+    """Agent reports the result of a backup run."""
+    run = await db.get(BackupRun, run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    job = await db.get(BackupJob, run.job_id)
+    if not job or job.server_id != server.id:
+        raise HTTPException(status_code=403, detail="Run does not belong to this server")
+
+    run.status = RunStatus.success if payload.status == "success" else RunStatus.failed
+    run.finished_at = datetime.now(timezone.utc)
+    run.size_bytes = payload.size_bytes
+    run.file_path = payload.file_path
+    run.checksum_sha256 = payload.checksum_sha256
+    run.error_message = payload.error_message
+
+    if payload.agent_version:
+        server.agent_version = payload.agent_version
+
+    db.add(run)
+    db.add(server)
+    await db.commit()
+
+    from app.tasks import send_notifications
+    send_notifications.delay(str(run_id))
+
+    return {"status": "ok", "run_id": str(run_id)}
+
+
+@router.get("/version")
+async def agent_version():
+    """Returns current agent version info."""
+    return {
+        "version": "1.0.0",
+        "download_url": "/agent/dbshield-agent-1.0.0.tar.gz",
+        "install_url": "/install.sh",
+    }
+
+
+# ── Discovery ─────────────────────────────────────────────
+from app.services import discovery as _discovery
+
+
+class DiscoveryRequestOut(BaseModel):
+    mssql_instance: str
+    username: str
+    password: str
+
+
+class DiscoveryReportPayload(BaseModel):
+    databases: list[str] = []
+    error: str | None = None
+
+
+@router.get("/discovery")
+async def get_discovery_request(
+    db: AsyncSession = Depends(get_db),
+    server: Server = Depends(get_server_by_token),
+):
+    req = await _discovery.get_request_for_agent(server.id)
+    if not req:
+        return None
+    return DiscoveryRequestOut(**req)
+
+
+@router.post("/discovery/result")
+async def report_discovery(
+    payload: DiscoveryReportPayload,
+    db: AsyncSession = Depends(get_db),
+    server: Server = Depends(get_server_by_token),
+):
+    await _discovery.store_result(server.id, payload.databases, payload.error)
+    await _discovery.consume_request(server.id)
+    return {"status": "ok"}
