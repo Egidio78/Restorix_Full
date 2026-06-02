@@ -25,7 +25,7 @@ interface DbInstance {
   id: string
   server_id: string
   name: string
-  mssql_instance: string
+  connection_string: string
   is_active: boolean
 }
 
@@ -52,11 +52,11 @@ function CopyButton({ text }: { text: string }) {
 function DatabasesModal({ server, onClose }: { server: Server; onClose: () => void }) {
   const qc = useQueryClient()
   const [showAdd, setShowAdd] = useState(false)
-  const [form, setForm] = useState({ name: "", mssql_instance: "localhost", username: "", password: "" })
+  const [form, setForm] = useState({ name: "", connection_string: "localhost", username: "", password: "" })
   const [error, setError] = useState("")
 
   const [showDiscover, setShowDiscover] = useState(false)
-  const [discoverForm, setDiscoverForm] = useState({ mssql_instance: "localhost", username: "sa", password: "" })
+  const [discoverForm, setDiscoverForm] = useState({ connection_string: "localhost", username: "sa", password: "" })
   const [discovering, setDiscovering] = useState(false)
   const [discovered, setDiscovered] = useState<string[] | null>(null)
   const [discoverError, setDiscoverError] = useState("")
@@ -72,7 +72,7 @@ function DatabasesModal({ server, onClose }: { server: Server; onClose: () => vo
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["databases", server.id] })
       setShowAdd(false)
-      setForm({ name: "", mssql_instance: "localhost", username: "", password: "" })
+      setForm({ name: "", connection_string: "localhost", username: "", password: "" })
       setError("")
     },
     onError: () => setError("Errore durante l'aggiunta del database"),
@@ -84,10 +84,10 @@ function DatabasesModal({ server, onClose }: { server: Server; onClose: () => vo
   })
 
   const [editDb, setEditDb] = useState<DbInstance | null>(null)
-  const [editDbForm, setEditDbForm] = useState({ name: "", mssql_instance: "", username: "", password: "" })
+  const [editDbForm, setEditDbForm] = useState({ name: "", connection_string: "", username: "", password: "" })
 
   const editDbMutation = useMutation({
-    mutationFn: ({ id, ...data }: { id: string; name: string; mssql_instance: string; username: string; password: string }) =>
+    mutationFn: ({ id, ...data }: { id: string; name: string; connection_string: string; username: string; password: string }) =>
       api.patch(`/servers/${server.id}/databases/${id}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["databases", server.id] })
@@ -134,7 +134,7 @@ function DatabasesModal({ server, onClose }: { server: Server; onClose: () => vo
     for (const dbName of selectedDbs) {
       await api.post(`/servers/${server.id}/databases`, {
         name: dbName,
-        mssql_instance: discoverForm.mssql_instance,
+        connection_string: discoverForm.connection_string,
         username: discoverForm.username,
         password: discoverForm.password,
       })
@@ -178,12 +178,12 @@ function DatabasesModal({ server, onClose }: { server: Server; onClose: () => vo
                       <Database className="h-4 w-4 text-primary" />
                       <span className="font-medium">{db.name}</span>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5 ml-6">Istanza: {db.mssql_instance}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 ml-6">Istanza: {db.connection_string}</p>
                   </div>
                   <div className="flex items-center gap-1">
                     <Button variant="ghost" size="icon" title="Modifica" onClick={() => {
                       setEditDb(db)
-                      setEditDbForm({ name: db.name, mssql_instance: db.mssql_instance, username: "", password: "" })
+                      setEditDbForm({ name: db.name, connection_string: db.connection_string, username: "", password: "" })
                     }}>
                       <Pencil className="h-4 w-4" />
                     </Button>
@@ -228,8 +228,8 @@ function DatabasesModal({ server, onClose }: { server: Server; onClose: () => vo
                   <div className="space-y-1.5">
                     <Label>{(server.engine ?? "mssql") === "mysql" ? "Host:Porta (es. 192.168.1.10:3306)" : "Istanza MSSQL"}</Label>
                     <Input
-                      value={discoverForm.mssql_instance}
-                      onChange={e => setDiscoverForm(f => ({ ...f, mssql_instance: e.target.value }))}
+                      value={discoverForm.connection_string}
+                      onChange={e => setDiscoverForm(f => ({ ...f, connection_string: e.target.value }))}
                       placeholder={(server.engine ?? "mssql") === "mysql" ? "localhost:3306" : "localhost o hostname\\istanza"}
                     />
                   </div>
@@ -246,7 +246,7 @@ function DatabasesModal({ server, onClose }: { server: Server; onClose: () => vo
                   {discoverError && <p className="text-destructive text-sm bg-destructive/10 rounded p-2">{discoverError}</p>}
                   <div className="flex justify-end gap-2">
                     <Button variant="outline" size="sm" onClick={() => { setShowDiscover(false); setDiscoverError("") }}>Annulla</Button>
-                    <Button size="sm" onClick={startDiscover} disabled={!discoverForm.mssql_instance}>
+                    <Button size="sm" onClick={startDiscover} disabled={!discoverForm.connection_string}>
                       <Database className="h-3.5 w-3.5 mr-1" /> Avvia Scoperta
                     </Button>
                   </div>
@@ -313,8 +313,8 @@ function DatabasesModal({ server, onClose }: { server: Server; onClose: () => vo
                 <Label>{(server.engine ?? "mssql") === "mysql" ? "Host:Porta (es. 192.168.1.10:3306)" : "Istanza MSSQL"}</Label>
                 <Input
                   placeholder={(server.engine ?? "mssql") === "mysql" ? "es. 192.168.1.10:3306" : "es. localhost, 192.168.1.10\\SQLEXPRESS"}
-                  value={form.mssql_instance}
-                  onChange={e => setForm(f => ({ ...f, mssql_instance: e.target.value }))}
+                  value={form.connection_string}
+                  onChange={e => setForm(f => ({ ...f, connection_string: e.target.value }))}
                 />
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -334,7 +334,7 @@ function DatabasesModal({ server, onClose }: { server: Server; onClose: () => vo
               {error && <p className="text-destructive text-sm">{error}</p>}
               <div className="flex justify-end gap-2">
                 <Button variant="outline" size="sm" onClick={() => { setShowAdd(false); setError("") }}>Annulla</Button>
-                <Button size="sm" disabled={!form.name || !form.mssql_instance || addMutation.isPending} onClick={() => addMutation.mutate(form)}>
+                <Button size="sm" disabled={!form.name || !form.connection_string || addMutation.isPending} onClick={() => addMutation.mutate(form)}>
                   {addMutation.isPending ? "Salvataggio..." : "Salva Database"}
                 </Button>
               </div>
@@ -360,7 +360,7 @@ function DatabasesModal({ server, onClose }: { server: Server; onClose: () => vo
             </div>
             <div className="space-y-1.5">
               <Label>Istanza MSSQL</Label>
-              <Input value={editDbForm.mssql_instance} onChange={e => setEditDbForm(f => ({ ...f, mssql_instance: e.target.value }))} />
+              <Input value={editDbForm.connection_string} onChange={e => setEditDbForm(f => ({ ...f, connection_string: e.target.value }))} />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1.5">
@@ -375,7 +375,7 @@ function DatabasesModal({ server, onClose }: { server: Server; onClose: () => vo
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditDb(null)}>Annulla</Button>
-            <Button disabled={!editDbForm.name || !editDbForm.mssql_instance || editDbMutation.isPending} onClick={() => {
+            <Button disabled={!editDbForm.name || !editDbForm.connection_string || editDbMutation.isPending} onClick={() => {
               if (editDb) editDbMutation.mutate({ id: editDb.id, ...editDbForm })
             }}>
               {editDbMutation.isPending ? "Salvataggio..." : "Salva"}
