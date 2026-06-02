@@ -84,7 +84,7 @@ install_python() {
             apt-get install -y -qq software-properties-common
             add-apt-repository -y ppa:deadsnakes/ppa
             # Rimuove cache stale del PPA (da tentativi precedenti) e forza re-download dei Package lists
-            rm -f /var/lib/apt/lists/ppa.launchpad.net_deadsnakes_ppa_ubuntu_dists_*
+            rm -f /var/lib/apt/lists/*deadsnakes*
             apt-get update -y
             if apt-get install -y python3.11 python3.11-venv python3.11-distutils; then
                 PYTHON_CMD="python3.11"
