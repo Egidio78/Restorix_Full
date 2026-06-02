@@ -5,17 +5,38 @@ from pathlib import Path
 from app.services.streamers.base import BaseStreamer
 
 
+def _parse_s3_endpoint(config: dict) -> tuple[str | None, str]:
+    """Return (endpoint_url, bucket) normalising Contabo-style configs where
+    the bucket name is appended to the endpoint URL."""
+    bucket = config["bucket"]
+    # Accept both 'endpoint' and 'endpoint_url' keys
+    raw = config.get("endpoint_url") or config.get("endpoint")
+    if not raw:
+        return None, bucket
+    # Strip trailing slash
+    raw = raw.rstrip("/")
+    # If the endpoint ends with /<bucket>, strip it (Contabo-style)
+    if raw.endswith(f"/{bucket}"):
+        raw = raw[: -len(f"/{bucket}")]
+    return raw, bucket
+
+
 class S3Streamer(BaseStreamer):
     def __init__(self, config: dict):
         super().__init__(config)
-        self.bucket = config["bucket"]
+        endpoint_url, self.bucket = _parse_s3_endpoint(config)
+        # Use path-style for S3-compatible endpoints (Contabo, MinIO, etc.)
+        addressing_style = "path" if endpoint_url else "auto"
         self._client = boto3.client(
             "s3",
-            endpoint_url=config.get("endpoint_url"),
+            endpoint_url=endpoint_url,
             aws_access_key_id=config["access_key"],
             aws_secret_access_key=config["secret_key"],
             region_name=config.get("region", "us-east-1"),
-            config=Config(signature_version="s3v4"),
+            config=Config(
+                signature_version="s3v4",
+                s3={"addressing_style": addressing_style},
+            ),
         )
 
     def head_size(self, remote_path: str) -> int:
