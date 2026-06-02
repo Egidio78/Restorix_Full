@@ -4,7 +4,6 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import api from "@/lib/api"
 import { useState, useMemo } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -252,31 +251,14 @@ export default function Logs() {
                       <TableCell className="text-right">
                         <div className="inline-flex items-center gap-1 justify-end">
                           {canDownload && run.status === "success" && !run.retention_purged && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" title="Scarica backup">
-                                  <Download className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                {run.encryption_enabled && (
-                                  <DropdownMenuItem
-                                    onSelect={() => {
-                                      window.location.href = downloadUrl(run.id, true)
-                                    }}
-                                  >
-                                    Scarica decifrato
-                                  </DropdownMenuItem>
-                                )}
-                                <DropdownMenuItem
-                                  onSelect={() => {
-                                    window.location.href = downloadUrl(run.id, false)
-                                  }}
-                                >
-                                  Scarica raw
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Scarica backup"
+                              onClick={() => { window.location.href = downloadUrl(run.id, false) }}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
                           )}
                           {isSuperAdmin && (
                             <Button variant="ghost" size="icon" className="text-destructive" title="Elimina log" onClick={() => {
