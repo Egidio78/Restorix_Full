@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Plus, Database, Play, Pause, Trash2, Clock, PlayCircle, Pencil, FolderArchive } from "lucide-react"
+import { Plus, Database, Play, Pause, Trash2, Clock, PlayCircle, Pencil, FolderArchive, Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -190,6 +190,32 @@ export default function Jobs() {
     }
   }
 
+  const duplicateJob = (job: BackupJob) => {
+    setSelectedServer(job.server_id)
+    setBackupType(job.backup_type)
+    setFolderPath(job.folder_path ?? "")
+    setForm({
+      name: job.name + " (copia)",
+      db_instance_id: job.db_instance_id ?? "",
+      storage_destination_id: job.storage_destination_id,
+      compression_enabled: job.compression_enabled,
+      mssql_native_compression: job.mssql_native_compression,
+      encryption_enabled: job.encryption_enabled,
+      retention_days: job.retention_days,
+      enabled: job.enabled,
+    })
+    const preset = CRON_PRESETS.find(p => p.value === job.schedule_cron)
+    if (preset) {
+      setCronPreset(preset.value)
+      setCustomCron("")
+    } else {
+      setCronPreset("custom")
+      setCustomCron(job.schedule_cron)
+    }
+    setError("")
+    setShowAdd(true)
+  }
+
   return (
     <div className="space-y-6">
       {runFeedback && (
@@ -270,6 +296,9 @@ export default function Jobs() {
                     </Button>
                     <Button variant="ghost" size="icon" title="Modifica" onClick={() => openEdit(job)}>
                       <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" title="Duplica" onClick={() => duplicateJob(job)}>
+                      <Copy className="h-4 w-4" />
                     </Button>
                     <Button variant="ghost" size="icon" onClick={() => toggleMutation.mutate(job.id)}>
                       {job.enabled ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
