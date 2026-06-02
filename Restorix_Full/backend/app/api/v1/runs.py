@@ -198,7 +198,6 @@ async def download_run(
         select(BackupRun)
         .options(
             selectinload(BackupRun.job).selectinload(BackupJob.storage_destination),
-            selectinload(BackupRun.job).selectinload(BackupJob.organization),
         )
         .where(BackupRun.id == run_id)
     )
@@ -267,7 +266,6 @@ async def send_run_to_temp(
         select(BackupRun)
         .options(
             selectinload(BackupRun.job).selectinload(BackupJob.storage_destination),
-            selectinload(BackupRun.job).selectinload(BackupJob.organization),
         )
         .where(BackupRun.id == run_id)
     )
