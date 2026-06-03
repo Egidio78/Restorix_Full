@@ -289,7 +289,7 @@ function SecurityTab({ user }: { user: any }) {
             <p className="text-xs text-yellow-800 mb-3">Mostrati solo ora. Usali se perdi l'accesso all'app.</p>
             <div className="grid grid-cols-2 gap-2">
               {backupCodes?.map((code, i) => (
-                <code key={i} className="bg-white border rounded px-2 py-1 text-sm font-mono text-center">{code}</code>
+                <code key={i} className="bg-white border rounded px-2 py-1 text-sm font-mono text-center text-slate-900 select-all">{code}</code>
               ))}
             </div>
           </div>
