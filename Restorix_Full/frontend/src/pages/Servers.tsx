@@ -19,6 +19,9 @@ interface Server {
   status: "never_connected" | "online" | "offline"
   is_active: boolean
   engine?: string
+  update_requested?: boolean
+  latest_version?: string
+  update_available?: boolean
 }
 
 interface DbInstance {
@@ -413,6 +416,12 @@ export default function Servers() {
   const { data: servers = [], isLoading } = useQuery<Server[]>({
     queryKey: ["servers"],
     queryFn: () => api.get("/servers/").then(r => r.data),
+    refetchInterval: 30000,
+  })
+
+  const updateAgentMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/servers/${id}/request-update`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["servers"] }),
   })
 
   const addMutation = useMutation({
@@ -497,7 +506,16 @@ export default function Servers() {
                       </div>
                       <p className="text-sm text-muted-foreground">{server.hostname}</p>
                       {server.agent_version && (
-                        <p className="text-xs text-muted-foreground/70">Agente v{server.agent_version}</p>
+                        <p className="text-xs text-muted-foreground/70 flex items-center gap-1.5">
+                          Agente v{server.agent_version}
+                          {server.update_requested ? (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">aggiornamento in corso…</Badge>
+                          ) : server.update_available ? (
+                            <Badge variant="warning" className="text-[10px] px-1.5 py-0">
+                              v{server.latest_version} disponibile
+                            </Badge>
+                          ) : null}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -514,6 +532,18 @@ export default function Servers() {
                     <Button variant="outline" size="sm" onClick={() => setShowInstall(server)}>
                       Installa agente
                     </Button>
+                    {server.agent_version && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        title="Aggiorna l'agente all'ultima versione"
+                        disabled={server.update_requested || updateAgentMutation.isPending}
+                        onClick={() => updateAgentMutation.mutate(server.id)}
+                      >
+                        <RefreshCw className={`h-3.5 w-3.5 mr-1 ${server.update_requested ? "animate-spin" : ""}`} />
+                        {server.update_requested ? "In corso…" : "Aggiorna"}
+                      </Button>
+                    )}
                     <Button variant="ghost" size="icon" title="Rigenera token" disabled={rotateMutation.isPending} onClick={() => {
                       if (confirm("Rigenerare il token? L'agente attuale si disconnetterà e dovrai reinstallarlo col nuovo token.")) rotateMutation.mutate(server.id)
                     }}>

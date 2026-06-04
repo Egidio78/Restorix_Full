@@ -206,14 +206,57 @@ async def report_run(
     return {"status": "ok", "run_id": str(run_id)}
 
 
+from app.core.agent_release import LATEST_AGENT_VERSION, AGENT_PACKAGE_FILENAME
+
+
+def _agent_download_url() -> str:
+    return f"/agent/{AGENT_PACKAGE_FILENAME}"
+
+
 @router.get("/version")
 async def agent_version():
-    """Returns current agent version info."""
+    """Returns the latest published agent version info."""
     return {
-        "version": "1.0.0",
-        "download_url": "/agent/dbshield-agent-1.0.0.tar.gz",
+        "version": LATEST_AGENT_VERSION,
+        "download_url": _agent_download_url(),
         "install_url": "/install.sh",
     }
+
+
+@router.get("/update-check")
+async def update_check(
+    current: str = Query(default=""),
+    db: AsyncSession = Depends(get_db),
+    server: Server = Depends(get_server_by_token),
+):
+    """Called by the agent updater (root systemd timer). Tells the agent whether
+    it should self-update: either a newer version is published, or an update was
+    requested from the web UI."""
+    should_update = bool(server.update_requested) or (current.strip() != LATEST_AGENT_VERSION)
+    return {
+        "should_update": should_update,
+        "latest_version": LATEST_AGENT_VERSION,
+        "download_url": _agent_download_url(),
+    }
+
+
+class UpdateDonePayload(BaseModel):
+    version: str | None = None
+
+
+@router.post("/update-done")
+async def update_done(
+    version: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    server: Server = Depends(get_server_by_token),
+):
+    """Agent reports it finished updating; clear the request flag and record version."""
+    if version:
+        server.agent_version = version
+    server.update_requested = False
+    db.add(server)
+    await db.commit()
+    return {"status": "ok"}
 
 
 # ── Discovery ─────────────────────────────────────────────

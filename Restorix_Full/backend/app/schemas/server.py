@@ -18,6 +18,9 @@ class ServerOut(BaseModel):
     agent_version: str | None
     status: AgentStatus
     is_active: bool
+    update_requested: bool = False
+    latest_version: str = ""
+    update_available: bool = False
 
     model_config = {"from_attributes": True}
 

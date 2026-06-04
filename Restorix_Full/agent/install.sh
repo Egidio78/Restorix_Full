@@ -203,10 +203,75 @@ StandardError=append:${LOG_DIR}/agent.log
 WantedBy=multi-user.target
 SERVICEEOF
 
+# ── Auto-update: root updater script + systemd timer ──────────────
+info "Installing auto-updater..."
+cat > "${INSTALL_DIR}/update.sh" << UPDATEEOF
+#!/usr/bin/env bash
+# Restorix agent self-updater. Runs as root via systemd timer.
+set -u
+CONFIG="${CONFIG_DIR}/config.json"
+VENV="${INSTALL_DIR}/venv"
+SERVICE="${SERVICE_NAME}"
+
+[ -f "\${CONFIG}" ] || exit 0
+API=\$("\${VENV}/bin/python" -c "import json;print(json.load(open('\${CONFIG}'))['api_url'])" 2>/dev/null) || exit 0
+TOKEN=\$("\${VENV}/bin/python" -c "import json;print(json.load(open('\${CONFIG}'))['agent_token'])" 2>/dev/null) || exit 0
+CURRENT=\$("\${VENV}/bin/python" -c "from dbshield_agent import __version__;print(__version__)" 2>/dev/null || echo "0.0.0")
+
+RESP=\$(curl -sf --max-time 20 "\${API}/api/v1/agent/update-check?token=\${TOKEN}&current=\${CURRENT}") || exit 0
+SHOULD=\$(printf '%s' "\${RESP}" | "\${VENV}/bin/python" -c "import sys,json;print(json.load(sys.stdin).get('should_update'))" 2>/dev/null)
+URL=\$(printf '%s' "\${RESP}" | "\${VENV}/bin/python" -c "import sys,json;print(json.load(sys.stdin).get('download_url',''))" 2>/dev/null)
+[ "\${SHOULD}" = "True" ] || exit 0
+[ -n "\${URL}" ] || exit 0
+
+# Absolute URL (download_url is a relative path on the platform)
+case "\${URL}" in
+  http*) FULL="\${URL}" ;;
+  *) FULL="\${API}\${URL}" ;;
+esac
+
+echo "[restorix-update] updating from \${CURRENT} ..."
+curl -sSLf --max-time 120 "\${FULL}" -o /tmp/ra-update.tar.gz || { echo "[restorix-update] download failed"; exit 1; }
+"\${VENV}/bin/pip" install --quiet --force-reinstall --no-deps /tmp/ra-update.tar.gz || { echo "[restorix-update] pip install failed"; rm -f /tmp/ra-update.tar.gz; exit 1; }
+rm -f /tmp/ra-update.tar.gz
+systemctl restart "\${SERVICE}"
+sleep 3
+NEW=\$("\${VENV}/bin/python" -c "from dbshield_agent import __version__;print(__version__)" 2>/dev/null || echo "")
+curl -sf --max-time 15 -X POST "\${API}/api/v1/agent/update-done?token=\${TOKEN}&version=\${NEW}" >/dev/null 2>&1 || true
+echo "[restorix-update] updated to \${NEW}"
+UPDATEEOF
+chmod +x "${INSTALL_DIR}/update.sh"
+
+cat > "/etc/systemd/system/${SERVICE_NAME}-update.service" << UPDSVCEOF
+[Unit]
+Description=Restorix Agent Auto-Updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=${INSTALL_DIR}/update.sh
+UPDSVCEOF
+
+cat > "/etc/systemd/system/${SERVICE_NAME}-update.timer" << UPDTMREOF
+[Unit]
+Description=Restorix Agent Auto-Updater timer
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+Unit=${SERVICE_NAME}-update.service
+
+[Install]
+WantedBy=timers.target
+UPDTMREOF
+
 # Reload and enable service
 systemctl daemon-reload
 systemctl enable "${SERVICE_NAME}"
 systemctl restart "${SERVICE_NAME}"
+systemctl enable "${SERVICE_NAME}-update.timer"
+systemctl start "${SERVICE_NAME}-update.timer"
 
 sleep 2
 if systemctl is-active --quiet "${SERVICE_NAME}"; then

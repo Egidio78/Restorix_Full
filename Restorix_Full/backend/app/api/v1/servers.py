@@ -224,6 +224,45 @@ async def rotate_token(
     return server
 
 
+@router.post("/{server_id}/request-update", response_model=ServerOut)
+async def request_agent_update(
+    server_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Flag the server's agent for update. The agent's root updater (systemd timer)
+    picks this up within ~10 minutes and self-updates."""
+    if current_user.role not in ("superadmin", "admin", "operator"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    result = await db.execute(
+        select(Server).where(
+            Server.id == server_id,
+            Server.org_id == _get_org_id(current_user),
+            Server.is_active == True,
+        )
+    )
+    server = result.scalar_one_or_none()
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    server.update_requested = True
+    db.add(server)
+    await db.commit()
+    await db.refresh(server)
+
+    await _safe_audit(
+        db,
+        org_id=current_user.org_id, user_id=current_user.id,
+        event_type=EventType.SERVER_UPDATED,
+        target_type="server", target_id=str(server.id),
+        description=f"Requested agent update for server {server.name}",
+        metadata={"name": server.name},
+        request=request,
+    )
+    return server
+
+
 # ── DbInstances ───────────────────────────────────────────
 
 @router.get("/{server_id}/databases", response_model=list[DbInstanceOut])

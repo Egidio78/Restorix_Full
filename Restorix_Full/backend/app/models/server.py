@@ -30,6 +30,7 @@ class Server(Base, TimestampMixin):
         default=lambda: secrets.token_hex(32)
     )
     agent_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    update_requested: Mapped[bool] = mapped_column(default=False, nullable=False)
     status: Mapped[AgentStatus] = mapped_column(
         SAEnum(AgentStatus, name="agentstatus", create_type=False),
         nullable=False,
@@ -43,3 +44,13 @@ class Server(Base, TimestampMixin):
     backup_jobs: Mapped[list["BackupJob"]] = relationship(
         "BackupJob", back_populates="server"
     )
+
+    @property
+    def latest_version(self) -> str:
+        from app.core.agent_release import LATEST_AGENT_VERSION
+        return LATEST_AGENT_VERSION
+
+    @property
+    def update_available(self) -> bool:
+        from app.core.agent_release import LATEST_AGENT_VERSION
+        return bool(self.agent_version) and self.agent_version != LATEST_AGENT_VERSION
