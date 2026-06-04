@@ -32,6 +32,10 @@ interface Server { id: string; name: string; hostname: string; engine?: string }
 interface DbInstance { id: string; name: string; connection_string: string }
 interface StorageDest { id: string; name: string; storage_type: string }
 
+// Default exclude pattern pre-filled for new MySQL jobs (editable). Tailored to
+// VTENext CRM volatile report tables; change here to adjust the suggestion.
+const DEFAULT_MYSQL_EXCLUDE = "vte_rep_subq_*"
+
 const CRON_PRESETS = [
   { label: "Ogni giorno alle 02:00", value: "0 2 * * *" },
   { label: "Ogni giorno alle 00:00", value: "0 0 * * *" },
@@ -52,7 +56,7 @@ export default function Jobs() {
   const [form, setForm] = useState({
     name: "", db_instance_id: "", storage_destination_id: "",
     compression_enabled: false, mssql_native_compression: true, encryption_enabled: false,
-    mysql_exclude_tables: "", retention_days: 30, enabled: true,
+    mysql_exclude_tables: DEFAULT_MYSQL_EXCLUDE, retention_days: 30, enabled: true,
   })
   const [error, setError] = useState("")
 
@@ -96,7 +100,7 @@ export default function Jobs() {
     setForm({
       name: "", db_instance_id: "", storage_destination_id: "",
       compression_enabled: false, mssql_native_compression: true, encryption_enabled: false,
-      mysql_exclude_tables: "", retention_days: 30, enabled: true,
+      mysql_exclude_tables: DEFAULT_MYSQL_EXCLUDE, retention_days: 30, enabled: true,
     })
     setSelectedServer("")
     setCronPreset("")
