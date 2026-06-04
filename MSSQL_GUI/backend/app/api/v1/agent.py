@@ -11,7 +11,9 @@ from fastapi.responses import PlainTextResponse, FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
+from app.api.deps import get_current_user
 from app.database import get_db
+from app.models.user import User
 from app.models.server import Server, AgentStatus
 from app.models.backup_job import BackupJob
 from app.models.backup_run import BackupRun, RunStatus
@@ -20,7 +22,7 @@ from app.models.storage import StorageDestination
 from app.core.encryption import decrypt
 from app.core.agent_version import AGENT_VERSION
 from app.services.instance_config import get_instance_config
-from app.services.agent_install import render_install_script
+from app.services.agent_install import render_install_script, render_install_script_windows
 from app.services.audit import log_event, EventType
 from app.schemas.agent_heartbeat import HeartbeatPayload, HeartbeatResponse
 
@@ -120,6 +122,13 @@ async def heartbeat(
     expected_sha256: str | None = None
 
     current_version = server.agent_version or ""
+
+    # Anti-orphan: se admin ha cliccato "Aggiorna ora" ma l'agent e' gia' alla
+    # versione corrente, resetta il flag (altrimenti rimarrebbe appeso e una
+    # release futura lo consumerebbe inaspettatamente).
+    if server.update_pending and current_version == AGENT_VERSION:
+        server.update_pending = False
+
     should_update = (
         current_version != AGENT_VERSION
         and (server.auto_update or server.update_pending)
@@ -400,6 +409,86 @@ async def agent_version():
     }
 
 
+@router.get("/migration-stats")
+async def migration_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Statistiche migrazione agenti (Piano 7d sotto-pagina /settings/migration).
+
+    Ritorna:
+    - old_domain / new_domain / old_domain_expires_at (dal `instance_config`)
+    - counts: total, migrated, pending, offline
+    - agents: lista con server, endpoint corrente, ultimo heartbeat, stato
+    """
+    # superadmin or admin only
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    if role not in ("superadmin", "admin"):
+        raise HTTPException(status_code=403, detail="Permessi insufficienti")
+
+    config = None
+    try:
+        config = await get_instance_config(db)
+    except Exception:
+        pass
+
+    new_domain = config.agent_endpoint.rstrip("/") if config and config.agent_endpoint else None
+    old_domain = getattr(config, "old_domain", None) if config else None
+    old_domain_expires_at = getattr(config, "old_domain_expires_at", None) if config else None
+
+    # Carica tutti i server attivi della org corrente
+    result = await db.execute(
+        select(Server).where(
+            Server.org_id == current_user.org_id,
+            Server.is_active == True,
+        )
+    )
+    servers = result.scalars().all()
+
+    now = datetime.now(timezone.utc)
+    offline_threshold = timedelta(minutes=5)
+
+    agents = []
+    total = len(servers)
+    migrated = 0
+    pending = 0
+    offline = 0
+
+    for s in servers:
+        last_hb = getattr(s, "last_heartbeat_at", None)
+        is_offline = last_hb is None or (now - last_hb) > offline_threshold
+        endpoint = s.last_heartbeat_endpoint
+        if is_offline:
+            status_label = "offline"
+            offline += 1
+        elif endpoint and new_domain and endpoint.rstrip("/") == new_domain:
+            status_label = "migrated"
+            migrated += 1
+        else:
+            status_label = "pending"
+            pending += 1
+
+        agents.append({
+            "id": str(s.id),
+            "name": s.name,
+            "hostname": s.hostname,
+            "current_endpoint": endpoint,
+            "last_heartbeat_at": last_hb.isoformat() if last_hb else None,
+            "status": status_label,
+        })
+
+    return {
+        "old_domain": old_domain,
+        "new_domain": new_domain,
+        "old_domain_expires_at": old_domain_expires_at.isoformat() if old_domain_expires_at else None,
+        "total": total,
+        "migrated": migrated,
+        "pending": pending,
+        "offline": offline,
+        "agents": agents,
+    }
+
+
 @router.get("/install-script", response_class=PlainTextResponse)
 async def get_install_script(db: AsyncSession = Depends(get_db)):
     config = await get_instance_config(db)
@@ -412,6 +501,25 @@ async def get_install_script(db: AsyncSession = Depends(get_db)):
 
     rendered = render_install_script(restorix_url, AGENT_VERSION)
     return PlainTextResponse(content=rendered, media_type="text/x-shellscript")
+
+
+@router.get("/install-script-windows", response_class=PlainTextResponse)
+async def get_install_script_windows(db: AsyncSession = Depends(get_db)):
+    """Render the PowerShell bootstrap installer for Windows agents.
+
+    One-liner usage:
+        $Env:AGENT_TOKEN = "..."; irm <url>/api/v1/agent/install-script-windows | iex
+    """
+    config = await get_instance_config(db)
+    if not config.setup_completed:
+        raise HTTPException(status_code=503, detail="Setup not completed")
+
+    restorix_url = (config.agent_endpoint or "").rstrip("/")
+    if not restorix_url:
+        raise HTTPException(status_code=503, detail="agent_endpoint not configured")
+
+    rendered = render_install_script_windows(restorix_url, AGENT_VERSION)
+    return PlainTextResponse(content=rendered, media_type="text/plain; charset=utf-8")
 
 
 # Discovery
