@@ -5,11 +5,23 @@ creates BackupRun records for jobs whose cron schedule is due.
 """
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone, timedelta
 from croniter import croniter
 from app.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
+
+
+def _scheduler_tz():
+    """Timezone in which cron schedules are interpreted (user's wall-clock).
+    Defaults to Europe/Rome; override with SCHEDULER_TIMEZONE env var."""
+    from zoneinfo import ZoneInfo
+    tz_name = os.environ.get("SCHEDULER_TIMEZONE", "Europe/Rome")
+    try:
+        return ZoneInfo(tz_name)
+    except Exception:
+        return ZoneInfo("Europe/Rome")
 
 
 def _is_due(cron_expr: str, now: datetime, window_seconds: int = 60) -> bool:
@@ -39,7 +51,9 @@ async def _check_due_jobs_async():
     engine = create_async_engine(settings.database_url, echo=False)
     SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-    now = datetime.now(timezone.utc)
+    # Evaluate cron schedules in the user's wall-clock timezone (Europe/Rome),
+    # not UTC — otherwise a "02:00" cron fires at 04:00 Italian time.
+    now = datetime.now(_scheduler_tz())
 
     async with SessionLocal() as db:
         try:
@@ -241,8 +255,8 @@ def cleanup_scheduler():
     from sqlalchemy import select
 
     async def _scan():
-        # Fix #9: use timezone-aware datetime consistently
-        now = datetime.now(timezone.utc).replace(tzinfo=None)  # croniter needs naive
+        # Interpret cleanup cron in the user's wall-clock timezone (Europe/Rome)
+        now = datetime.now(_scheduler_tz()).replace(tzinfo=None)
         window_start = now - timedelta(minutes=5)
         enqueued = []
         async with AsyncSessionLocal() as db:
