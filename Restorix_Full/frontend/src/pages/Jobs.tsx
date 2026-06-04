@@ -56,7 +56,7 @@ export default function Jobs() {
   const [form, setForm] = useState({
     name: "", db_instance_id: "", storage_destination_id: "",
     compression_enabled: false, mssql_native_compression: true, encryption_enabled: false,
-    mysql_exclude_tables: DEFAULT_MYSQL_EXCLUDE, retention_days: 30, enabled: true,
+    mysql_exclude_tables: "", retention_days: 30, enabled: true,
   })
   const [error, setError] = useState("")
 
@@ -100,7 +100,7 @@ export default function Jobs() {
     setForm({
       name: "", db_instance_id: "", storage_destination_id: "",
       compression_enabled: false, mssql_native_compression: true, encryption_enabled: false,
-      mysql_exclude_tables: DEFAULT_MYSQL_EXCLUDE, retention_days: 30, enabled: true,
+      mysql_exclude_tables: "", retention_days: 30, enabled: true,
     })
     setSelectedServer("")
     setCronPreset("")
@@ -372,7 +372,20 @@ export default function Jobs() {
             {(backupType === "mssql" || backupType === "mysql") ? (
               <div className="space-y-1.5">
                 <Label>Database</Label>
-                <Select value={form.db_instance_id} onValueChange={v => setForm(f => ({ ...f, db_instance_id: v }))} disabled={!selectedServer || dbInstances.length === 0}>
+                <Select value={form.db_instance_id} onValueChange={v => {
+                  // Auto-suggest the VTE exclude pattern only for VTENext databases
+                  // (named like 'vte2102_2180'); leave empty otherwise.
+                  const db = dbInstances.find(d => d.id === v)
+                  const isVte = !!db && /^vte/i.test(db.name)
+                  setForm(f => ({
+                    ...f,
+                    db_instance_id: v,
+                    mysql_exclude_tables:
+                      f.mysql_exclude_tables === "" || f.mysql_exclude_tables === DEFAULT_MYSQL_EXCLUDE
+                        ? (isVte ? DEFAULT_MYSQL_EXCLUDE : "")
+                        : f.mysql_exclude_tables,
+                  }))
+                }} disabled={!selectedServer || dbInstances.length === 0}>
                   <SelectTrigger>
                     <SelectValue placeholder={selectedServer ? (dbInstances.length === 0 ? "Nessun DB configurato" : "Seleziona database...") : "Prima seleziona un server"} />
                   </SelectTrigger>
