@@ -24,7 +24,7 @@ from app.core.agent_version import AGENT_VERSION
 from app.services.instance_config import get_instance_config
 from app.services.agent_install import render_install_script, render_install_script_windows
 from app.services.audit import log_event, EventType
-from app.schemas.agent_heartbeat import HeartbeatPayload, HeartbeatResponse
+from app.schemas.agent_heartbeat import HeartbeatPayload, HeartbeatResponse, DbInstanceMetadataPayload
 
 router = APIRouter()
 
@@ -90,6 +90,28 @@ async def heartbeat(
 
     if payload and payload.current_endpoint:
         server.last_heartbeat_endpoint = payload.current_endpoint.rstrip("/")
+
+    # OS tracking (v3 / migration 0015) — backward compatible.
+    if payload is not None:
+        first_os_detection = server.os_type is None and payload.os_type is not None
+        if payload.os_type is not None:
+            server.os_type = payload.os_type
+        if payload.os_version is not None:
+            server.os_version = payload.os_version
+        if first_os_detection:
+            try:
+                await log_event(
+                    db,
+                    org_id=server.org_id,
+                    user_id=None,
+                    event_type=EventType.SERVER_OS_DETECTED,
+                    target_type="server",
+                    target_id=server.id,
+                    description=f"OS detected: {payload.os_type}",
+                    metadata={"os_type": payload.os_type, "os_version": payload.os_version},
+                )
+            except Exception:
+                pass
 
     # Auto-update timeout sweeper
     now = datetime.now(timezone.utc)
@@ -557,3 +579,49 @@ async def report_discovery(
     await _discovery.store_result(server.id, payload.databases, payload.error)
     await _discovery.consume_request(server.id)
     return {"status": "ok"}
+
+
+@router.post("/dbinstance-metadata")
+async def report_dbinstance_metadata(
+    payload: DbInstanceMetadataPayload,
+    db: AsyncSession = Depends(get_db),
+    server: Server = Depends(get_server_by_token),
+):
+    """Agent reports MSSQL version metadata for one of its db_instances."""
+    dbi = await db.get(DbInstance, payload.db_instance_id)
+    if not dbi:
+        raise HTTPException(status_code=404, detail="DbInstance not found")
+    if dbi.server_id != server.id:
+        raise HTTPException(status_code=403, detail="DbInstance does not belong to this server")
+
+    if payload.mssql_version is not None:
+        dbi.mssql_version = payload.mssql_version
+    if payload.mssql_product_version_string is not None:
+        dbi.mssql_product_version_string = payload.mssql_product_version_string
+    if payload.mssql_edition is not None:
+        dbi.mssql_edition = payload.mssql_edition
+    if payload.mssql_product_level is not None:
+        dbi.mssql_product_level = payload.mssql_product_level
+    dbi.metadata_updated_at = datetime.now(timezone.utc)
+    db.add(dbi)
+
+    try:
+        await log_event(
+            db,
+            org_id=server.org_id,
+            user_id=None,
+            event_type=EventType.DBINSTANCE_METADATA_UPDATED,
+            target_type="db_instance",
+            target_id=dbi.id,
+            description=f"MSSQL metadata updated for {dbi.name}",
+            metadata={
+                "mssql_version": payload.mssql_version,
+                "mssql_edition": payload.mssql_edition,
+                "mssql_product_level": payload.mssql_product_level,
+            },
+        )
+    except Exception:
+        pass
+
+    await db.commit()
+    return {"status": "ok", "db_instance_id": str(dbi.id)}

@@ -26,6 +26,9 @@ class ServerOut(BaseModel):
     last_update_error: str | None = None
     last_update_from_version: str | None = None
     last_update_to_version: str | None = None
+    # OS tracking (migration 0015)
+    os_type: str | None = None
+    os_version: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -43,5 +46,11 @@ class DbInstanceOut(BaseModel):
     name: str
     mssql_instance: str
     is_active: bool
+    # MSSQL metadata (migration 0015)
+    mssql_version: str | None = None
+    mssql_product_version_string: str | None = None
+    mssql_edition: str | None = None
+    mssql_product_level: str | None = None
+    metadata_updated_at: datetime | None = None
 
     model_config = {"from_attributes": True}

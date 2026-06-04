@@ -111,6 +111,10 @@ class EventType(str, Enum):
     AGENT_UPDATE_FAILED             = "agent.update.failed"
     AGENT_AUTO_UPDATE_CHANGED       = "agent.auto_update.changed"
 
+    # Server OS + DbInstance MSSQL metadata (migration 0015)
+    SERVER_OS_DETECTED              = "server.os.detected"
+    DBINSTANCE_METADATA_UPDATED     = "dbinstance.metadata.updated"
+
 
 def _extract_source_ip(request: Request | None) -> str | None:
     if request is None:

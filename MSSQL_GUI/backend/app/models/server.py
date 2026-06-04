@@ -50,6 +50,10 @@ class Server(Base, TimestampMixin):
     last_update_from_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
     last_update_to_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
+    # OS tracking (migration 0015)
+    os_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    os_version: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     db_instances: Mapped[list["DbInstance"]] = relationship(
         "DbInstance", back_populates="server", cascade="all, delete-orphan"
     )
