@@ -23,6 +23,7 @@ interface BackupJob {
   compression_enabled: boolean
   mssql_native_compression: boolean
   encryption_enabled: boolean
+  mysql_exclude_tables: string | null
   retention_days: number
   enabled: boolean
 }
@@ -51,7 +52,7 @@ export default function Jobs() {
   const [form, setForm] = useState({
     name: "", db_instance_id: "", storage_destination_id: "",
     compression_enabled: false, mssql_native_compression: true, encryption_enabled: false,
-    retention_days: 30, enabled: true,
+    mysql_exclude_tables: "", retention_days: 30, enabled: true,
   })
   const [error, setError] = useState("")
 
@@ -95,7 +96,7 @@ export default function Jobs() {
     setForm({
       name: "", db_instance_id: "", storage_destination_id: "",
       compression_enabled: false, mssql_native_compression: true, encryption_enabled: false,
-      retention_days: 30, enabled: true,
+      mysql_exclude_tables: "", retention_days: 30, enabled: true,
     })
     setSelectedServer("")
     setCronPreset("")
@@ -118,6 +119,7 @@ export default function Jobs() {
       backup_type: backupType,
       db_instance_id: (backupType === "mssql" || backupType === "mysql") ? form.db_instance_id : null,
       folder_path: backupType === "folder" ? folderPath : null,
+      mysql_exclude_tables: backupType === "mysql" ? (form.mysql_exclude_tables || null) : null,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["jobs"] })
@@ -179,6 +181,7 @@ export default function Jobs() {
       encryption_password: "",
       db_instance_id: job.db_instance_id,
       folder_path: job.folder_path ?? "",
+      mysql_exclude_tables: job.mysql_exclude_tables ?? "",
     })
     const preset = CRON_PRESETS.find(p => p.value === job.schedule_cron)
     if (preset) {
@@ -201,6 +204,7 @@ export default function Jobs() {
       compression_enabled: job.compression_enabled,
       mssql_native_compression: job.mssql_native_compression,
       encryption_enabled: job.encryption_enabled,
+      mysql_exclude_tables: job.mysql_exclude_tables ?? "",
       retention_days: job.retention_days,
       enabled: job.enabled,
     })
@@ -373,7 +377,20 @@ export default function Jobs() {
                   </SelectContent>
                 </Select>
                 {backupType === "mysql" && (
-                  <p className="text-xs text-muted-foreground">Output: <code>.sql.gz</code></p>
+                  <>
+                    <p className="text-xs text-muted-foreground">Output: <code>.sql.gz</code></p>
+                    <div className="space-y-1 pt-1">
+                      <Label className="text-xs">Escludi tabelle (opzionale)</Label>
+                      <Input
+                        placeholder="es. vte_rep_subq_*, *_tmp"
+                        value={form.mysql_exclude_tables}
+                        onChange={e => setForm(f => ({ ...f, mysql_exclude_tables: e.target.value }))}
+                      />
+                      <p className="text-[11px] text-muted-foreground/70">
+                        Pattern separati da virgola. Utile per tabelle temporanee/report del CRM che causano l'errore "Table definition has changed" (1412).
+                      </p>
+                    </div>
+                  </>
                 )}
               </div>
             ) : (
@@ -476,6 +493,19 @@ export default function Jobs() {
                       {editDbInstances.map(d => <SelectItem key={d.id} value={d.id}>{d.name} ({d.connection_string})</SelectItem>)}
                     </SelectContent>
                   </Select>
+                  {editJob.backup_type === "mysql" && (
+                    <div className="space-y-1 pt-1">
+                      <Label className="text-xs">Escludi tabelle (opzionale)</Label>
+                      <Input
+                        placeholder="es. vte_rep_subq_*, *_tmp"
+                        value={editForm.mysql_exclude_tables ?? ""}
+                        onChange={e => setEditForm((f: any) => ({ ...f, mysql_exclude_tables: e.target.value }))}
+                      />
+                      <p className="text-[11px] text-muted-foreground/70">
+                        Pattern separati da virgola. Per tabelle temporanee/report che causano l'errore 1412.
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-1.5">

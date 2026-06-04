@@ -13,7 +13,7 @@ import hashlib
 import os
 import threading
 
-LATEST_AGENT_VERSION = "1.2.1"
+LATEST_AGENT_VERSION = "1.2.2"
 AGENT_PACKAGE_FILENAME = "restorix-agent-1.0.0.tar.gz"
 
 # Directory shared (read-only) with nginx; holds the served tarball.

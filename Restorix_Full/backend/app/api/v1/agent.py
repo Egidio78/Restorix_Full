@@ -196,6 +196,7 @@ async def get_pending_jobs(
             "mssql_native_compression": job.mssql_native_compression,
             "encryption_enabled": job.encryption_enabled,
             "encryption_password": enc_password,
+            "mysql_exclude_tables": job.mysql_exclude_tables or "",
             "retention_days": job.retention_days,
         })
 

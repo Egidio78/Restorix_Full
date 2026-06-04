@@ -46,6 +46,7 @@ def execute_job(job: dict, config: AgentConfig, client: AgentClient) -> None:
                 password=job.get("db_password", ""),
                 temp_dir=config.temp_dir,
                 name_prefix=server_prefix,
+                exclude_tables=job.get("mysql_exclude_tables", ""),
             )
             already_compressed = True  # sempre .sql.gz
 

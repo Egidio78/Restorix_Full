@@ -17,6 +17,7 @@ class BackupJobCreate(BaseModel):
     mssql_native_compression: bool = True
     encryption_enabled: bool = False
     encryption_password: str | None = None
+    mysql_exclude_tables: str | None = None
     retention_days: int = 30
     enabled: bool = True
 
@@ -31,6 +32,7 @@ class BackupJobUpdate(BaseModel):
     mssql_native_compression: bool | None = None
     encryption_enabled: bool | None = None
     encryption_password: str | None = None
+    mysql_exclude_tables: str | None = None
     retention_days: int | None = None
     enabled: bool | None = None
 
@@ -48,6 +50,7 @@ class BackupJobOut(BaseModel):
     compression_enabled: bool
     mssql_native_compression: bool
     encryption_enabled: bool
+    mysql_exclude_tables: str | None = None
     retention_days: int
     enabled: bool
 

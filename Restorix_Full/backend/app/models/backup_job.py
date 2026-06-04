@@ -42,6 +42,7 @@ class BackupJob(Base, TimestampMixin):
     mssql_native_compression: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"), default=True)
     encryption_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
     encryption_password_enc: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    mysql_exclude_tables: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     retention_days: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
     enabled: Mapped[bool] = mapped_column(default=True, nullable=False)
 

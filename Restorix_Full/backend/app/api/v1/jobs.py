@@ -94,6 +94,7 @@ async def create_job(
         compression_enabled=payload.compression_enabled,
         encryption_enabled=payload.encryption_enabled,
         encryption_password_enc=enc_password,
+        mysql_exclude_tables=(payload.mysql_exclude_tables or None) if payload.backup_type == "mysql" else None,
         retention_days=payload.retention_days,
         enabled=payload.enabled,
     )
@@ -168,6 +169,8 @@ async def update_job(
         job.schedule_cron = payload.schedule_cron
     if payload.compression_enabled is not None:
         job.compression_enabled = payload.compression_enabled
+    if payload.mysql_exclude_tables is not None:
+        job.mysql_exclude_tables = payload.mysql_exclude_tables.strip() or None
     if payload.retention_days is not None:
         job.retention_days = payload.retention_days
     if payload.enabled is not None:
