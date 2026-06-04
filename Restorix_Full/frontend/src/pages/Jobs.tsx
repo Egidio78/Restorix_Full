@@ -372,20 +372,7 @@ export default function Jobs() {
             {(backupType === "mssql" || backupType === "mysql") ? (
               <div className="space-y-1.5">
                 <Label>Database</Label>
-                <Select value={form.db_instance_id} onValueChange={v => {
-                  // Auto-suggest the VTE exclude pattern only for VTENext databases
-                  // (named like 'vte2102_2180'); leave empty otherwise.
-                  const db = dbInstances.find(d => d.id === v)
-                  const isVte = !!db && /^vte/i.test(db.name)
-                  setForm(f => ({
-                    ...f,
-                    db_instance_id: v,
-                    mysql_exclude_tables:
-                      f.mysql_exclude_tables === "" || f.mysql_exclude_tables === DEFAULT_MYSQL_EXCLUDE
-                        ? (isVte ? DEFAULT_MYSQL_EXCLUDE : "")
-                        : f.mysql_exclude_tables,
-                  }))
-                }} disabled={!selectedServer || dbInstances.length === 0}>
+                <Select value={form.db_instance_id} onValueChange={v => setForm(f => ({ ...f, db_instance_id: v }))} disabled={!selectedServer || dbInstances.length === 0}>
                   <SelectTrigger>
                     <SelectValue placeholder={selectedServer ? (dbInstances.length === 0 ? "Nessun DB configurato" : "Seleziona database...") : "Prima seleziona un server"} />
                   </SelectTrigger>
@@ -396,15 +383,29 @@ export default function Jobs() {
                 {backupType === "mysql" && (
                   <>
                     <p className="text-xs text-muted-foreground">Output: <code>.sql.gz</code></p>
+                    <label className="flex items-start gap-2 cursor-pointer pt-1">
+                      <input
+                        type="checkbox"
+                        className="rounded mt-0.5"
+                        checked={form.mysql_exclude_tables === DEFAULT_MYSQL_EXCLUDE}
+                        onChange={e => setForm(f => ({ ...f, mysql_exclude_tables: e.target.checked ? DEFAULT_MYSQL_EXCLUDE : "" }))}
+                      />
+                      <span className="text-sm">
+                        Database VTE (CRM VTENext)
+                        <span className="block text-[11px] text-muted-foreground/70">
+                          Esclude le tabelle temporanee <code>vte_rep_subq_*</code> che causano l'errore 1412 durante il backup.
+                        </span>
+                      </span>
+                    </label>
                     <div className="space-y-1 pt-1">
-                      <Label className="text-xs">Escludi tabelle (opzionale)</Label>
+                      <Label className="text-xs">Escludi tabelle (avanzato)</Label>
                       <Input
                         placeholder="es. vte_rep_subq_*, *_tmp"
                         value={form.mysql_exclude_tables}
                         onChange={e => setForm(f => ({ ...f, mysql_exclude_tables: e.target.value }))}
                       />
                       <p className="text-[11px] text-muted-foreground/70">
-                        Pattern separati da virgola. Utile per tabelle temporanee/report del CRM che causano l'errore "Table definition has changed" (1412).
+                        Pattern separati da virgola. La checkbox sopra imposta automaticamente il pattern VTE.
                       </p>
                     </div>
                   </>
@@ -511,17 +512,33 @@ export default function Jobs() {
                     </SelectContent>
                   </Select>
                   {editJob.backup_type === "mysql" && (
+                    <>
+                    <label className="flex items-start gap-2 cursor-pointer pt-1">
+                      <input
+                        type="checkbox"
+                        className="rounded mt-0.5"
+                        checked={(editForm.mysql_exclude_tables ?? "") === DEFAULT_MYSQL_EXCLUDE}
+                        onChange={e => setEditForm((f: any) => ({ ...f, mysql_exclude_tables: e.target.checked ? DEFAULT_MYSQL_EXCLUDE : "" }))}
+                      />
+                      <span className="text-sm">
+                        Database VTE (CRM VTENext)
+                        <span className="block text-[11px] text-muted-foreground/70">
+                          Esclude le tabelle temporanee <code>vte_rep_subq_*</code> (errore 1412).
+                        </span>
+                      </span>
+                    </label>
                     <div className="space-y-1 pt-1">
-                      <Label className="text-xs">Escludi tabelle (opzionale)</Label>
+                      <Label className="text-xs">Escludi tabelle (avanzato)</Label>
                       <Input
                         placeholder="es. vte_rep_subq_*, *_tmp"
                         value={editForm.mysql_exclude_tables ?? ""}
                         onChange={e => setEditForm((f: any) => ({ ...f, mysql_exclude_tables: e.target.value }))}
                       />
                       <p className="text-[11px] text-muted-foreground/70">
-                        Pattern separati da virgola. Per tabelle temporanee/report che causano l'errore 1412.
+                        Pattern separati da virgola. La checkbox sopra imposta il pattern VTE.
                       </p>
                     </div>
+                    </>
                   )}
                 </div>
               ) : (
