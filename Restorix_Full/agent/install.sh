@@ -180,155 +180,18 @@ CONFIGEOF
 chmod 640 "${CONFIG_DIR}/config.json"
 chown root:"${AGENT_USER}" "${CONFIG_DIR}/config.json"
 
-# Create systemd service (RuntimeDirectory gives the non-root agent a writable
-# /run/restorix-agent to drop the update trigger for the root updater)
-info "Creating systemd service..."
-cat > "/etc/systemd/system/${SERVICE_NAME}.service" << SERVICEEOF
-[Unit]
-Description=Restorix Backup Agent
-After=network.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=${AGENT_USER}
-Group=${AGENT_USER}
-ExecStart=${INSTALL_DIR}/venv/bin/restorix-agent
-Environment=RESTORIX_CONFIG=${CONFIG_DIR}/config.json
-RuntimeDirectory=restorix-agent
-RuntimeDirectoryMode=0770
-RuntimeDirectoryPreserve=yes
-Restart=always
-RestartSec=10
-StandardOutput=append:${LOG_DIR}/agent.log
-StandardError=append:${LOG_DIR}/agent.log
-
-[Install]
-WantedBy=multi-user.target
-SERVICEEOF
-
-# ── Auto-update: root updater + systemd path-unit (heartbeat trigger) + timer (fallback) ──
-info "Installing auto-updater..."
-# Quoted heredoc: written verbatim, paths are fixed constants.
-cat > "${INSTALL_DIR}/update.sh" << 'UPDATEEOF'
-#!/usr/bin/env bash
-# Restorix agent self-updater (runs as root). Triggered by the path-unit when the
-# agent drops /run/restorix-agent/update.json, or periodically by the timer.
-set -u
-CONFIG="/etc/restorix-agent/config.json"
-VENV="/opt/restorix-agent/venv"
-SERVICE="restorix-agent"
-TRIGGER="/run/restorix-agent/update.json"
-PY="${VENV}/bin/python"
-
-[ -f "${CONFIG}" ] || exit 0
-API=$("${PY}" -c "import json;print(json.load(open('${CONFIG}'))['api_url'])" 2>/dev/null) || exit 0
-TOKEN=$("${PY}" -c "import json;print(json.load(open('${CONFIG}'))['agent_token'])" 2>/dev/null) || exit 0
-CURRENT=$("${PY}" -c "from dbshield_agent import __version__;print(__version__)" 2>/dev/null || echo "0.0.0")
-
-URL=""; SHA=""; VERSION=""
-if [ -f "${TRIGGER}" ]; then
-    URL=$("${PY}" -c "import json;print(json.load(open('${TRIGGER}')).get('download_url',''))" 2>/dev/null)
-    SHA=$("${PY}" -c "import json;print(json.load(open('${TRIGGER}')).get('sha256',''))" 2>/dev/null)
-    VERSION=$("${PY}" -c "import json;print(json.load(open('${TRIGGER}')).get('version',''))" 2>/dev/null)
-    rm -f "${TRIGGER}"
+# ── systemd plumbing + auto-updater ──────────────────────────────────────
+# Single source of truth lives in the agent package (dbshield_agent.bootstrap).
+# It writes the agent service (with RuntimeDirectory), update.sh, the update
+# path-unit (instant heartbeat trigger) and the fallback timer, then enables +
+# starts everything. The updater re-runs this on each package update, so the
+# plumbing self-heals and never needs a manual touch again.
+info "Installing systemd plumbing via bootstrap..."
+if [ -x "${INSTALL_DIR}/venv/bin/restorix-agent-bootstrap" ]; then
+    "${INSTALL_DIR}/venv/bin/restorix-agent-bootstrap"
 else
-    RESP=$(curl -sf --max-time 20 "${API}/api/v1/agent/update-check?token=${TOKEN}&current=${CURRENT}") || exit 0
-    SHOULD=$(printf '%s' "${RESP}" | "${PY}" -c "import sys,json;print(json.load(sys.stdin).get('should_update'))" 2>/dev/null)
-    [ "${SHOULD}" = "True" ] || exit 0
-    URL=$(printf '%s' "${RESP}" | "${PY}" -c "import sys,json;print(json.load(sys.stdin).get('download_url',''))" 2>/dev/null)
-    SHA=$(printf '%s' "${RESP}" | "${PY}" -c "import sys,json;print(json.load(sys.stdin).get('sha256',''))" 2>/dev/null)
-    VERSION=$(printf '%s' "${RESP}" | "${PY}" -c "import sys,json;print(json.load(sys.stdin).get('latest_version',''))" 2>/dev/null)
+    error "Agent package not installed (bootstrap missing). Re-run after the platform is reachable."
 fi
-[ -n "${URL}" ] || exit 0
-
-case "${URL}" in http*) FULL="${URL}" ;; *) FULL="${API}${URL}" ;; esac
-report_fail() { curl -sf --max-time 15 -X POST "${API}/api/v1/agent/update-done?token=${TOKEN}&success=false" >/dev/null 2>&1 || true; }
-
-echo "[restorix-update] updating ${CURRENT} -> ${VERSION} ..."
-curl -sSLf --max-time 180 "${FULL}" -o /tmp/ra-update.tar.gz || { echo "download failed"; report_fail; exit 1; }
-
-# Verify SHA256
-if [ -n "${SHA}" ]; then
-    ACTUAL=$("${PY}" -c "import hashlib;print(hashlib.sha256(open('/tmp/ra-update.tar.gz','rb').read()).hexdigest())" 2>/dev/null)
-    if [ "${ACTUAL}" != "${SHA}" ]; then
-        echo "[restorix-update] SHA256 mismatch"; rm -f /tmp/ra-update.tar.gz; report_fail; exit 1
-    fi
-fi
-
-# Backup current package for rollback
-SITEPKG=$("${PY}" -c "import dbshield_agent,os;print(os.path.dirname(dbshield_agent.__file__))" 2>/dev/null)
-BACKUP="/tmp/ra-pkg-backup.$$"
-[ -n "${SITEPKG}" ] && cp -a "${SITEPKG}" "${BACKUP}" 2>/dev/null || true
-
-if ! "${VENV}/bin/pip" install --quiet --force-reinstall --no-deps /tmp/ra-update.tar.gz; then
-    echo "[restorix-update] pip install failed, rolling back"
-    [ -d "${BACKUP}" ] && [ -n "${SITEPKG}" ] && { rm -rf "${SITEPKG}"; cp -a "${BACKUP}" "${SITEPKG}"; }
-    rm -rf "${BACKUP}" /tmp/ra-update.tar.gz; report_fail; exit 1
-fi
-rm -f /tmp/ra-update.tar.gz
-
-systemctl restart "${SERVICE}"
-sleep 4
-NEW=$("${PY}" -c "from dbshield_agent import __version__;print(__version__)" 2>/dev/null || echo "")
-if systemctl is-active --quiet "${SERVICE}" && [ -n "${NEW}" ]; then
-    rm -rf "${BACKUP}"
-    curl -sf --max-time 15 -X POST "${API}/api/v1/agent/update-done?token=${TOKEN}&version=${NEW}&success=true" >/dev/null 2>&1 || true
-    echo "[restorix-update] updated to ${NEW}"
-else
-    echo "[restorix-update] agent did not start, rolling back"
-    [ -d "${BACKUP}" ] && [ -n "${SITEPKG}" ] && { rm -rf "${SITEPKG}"; cp -a "${BACKUP}" "${SITEPKG}"; systemctl restart "${SERVICE}"; }
-    rm -rf "${BACKUP}"
-    report_fail
-fi
-UPDATEEOF
-chmod +x "${INSTALL_DIR}/update.sh"
-
-cat > "/etc/systemd/system/${SERVICE_NAME}-update.service" << UPDSVCEOF
-[Unit]
-Description=Restorix Agent Auto-Updater
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=${INSTALL_DIR}/update.sh
-UPDSVCEOF
-
-# Path-unit: fire the updater the instant the agent drops the trigger file (≤30s after heartbeat)
-cat > "/etc/systemd/system/${SERVICE_NAME}-update.path" << UPDPATHEOF
-[Unit]
-Description=Restorix Agent update trigger watcher
-
-[Path]
-PathExists=/run/restorix-agent/update.json
-Unit=${SERVICE_NAME}-update.service
-
-[Install]
-WantedBy=paths.target
-UPDPATHEOF
-
-cat > "/etc/systemd/system/${SERVICE_NAME}-update.timer" << UPDTMREOF
-[Unit]
-Description=Restorix Agent Auto-Updater timer (fallback)
-
-[Timer]
-OnBootSec=2min
-OnUnitActiveSec=15min
-Unit=${SERVICE_NAME}-update.service
-
-[Install]
-WantedBy=timers.target
-UPDTMREOF
-
-# Reload and enable service + updater units
-systemctl daemon-reload
-systemctl enable "${SERVICE_NAME}"
-systemctl restart "${SERVICE_NAME}"
-systemctl enable "${SERVICE_NAME}-update.path"
-systemctl start "${SERVICE_NAME}-update.path"
-systemctl enable "${SERVICE_NAME}-update.timer"
-systemctl start "${SERVICE_NAME}-update.timer"
 
 sleep 2
 if systemctl is-active --quiet "${SERVICE_NAME}"; then

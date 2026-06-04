@@ -14,6 +14,7 @@ setup(
     entry_points={
         "console_scripts": [
             "restorix-agent=dbshield_agent.main:main",
+            "restorix-agent-bootstrap=dbshield_agent.bootstrap:main",
         ],
     },
 )
