@@ -50,9 +50,13 @@ TARBALL="dist/restorix_agent-1.0.0.tar.gz"
 SHA=$(python -c "import hashlib;print(hashlib.sha256(open('${TARBALL}','rb').read()).hexdigest())")
 echo "  sha256: ${SHA}"
 
-echo "==> Uploading to ${SSH_HOST}:${AGENT_DIST}"
-${SCP} "${TARBALL}" "${SSH_HOST}:${AGENT_DIST}"
-${SCP} "install.sh" "${SSH_HOST}:${REMOTE_DIR}/agent-dist/install.sh"
+echo "==> Uploading to ${SSH_HOST}:${AGENT_DIST} (atomic)"
+# Upload to a temp name then rename on the server, so the API never computes the
+# SHA256 over a half-written file and agents never download a partial tarball.
+${SCP} "${TARBALL}" "${SSH_HOST}:${AGENT_DIST}.tmp"
+${SSH} "${SSH_HOST}" "mv -f ${AGENT_DIST}.tmp ${AGENT_DIST}"
+${SCP} "install.sh" "${SSH_HOST}:${REMOTE_DIR}/agent-dist/install.sh.tmp"
+${SSH} "${SSH_HOST}" "mv -f ${REMOTE_DIR}/agent-dist/install.sh.tmp ${REMOTE_DIR}/agent-dist/install.sh"
 
 echo "==> Rebuilding API so it serves LATEST_AGENT_VERSION=${VERSION}"
 ${SCP} "${REPO}/backend/app/core/agent_release.py" "${SSH_HOST}:${REMOTE_DIR}/backend/app/core/agent_release.py"

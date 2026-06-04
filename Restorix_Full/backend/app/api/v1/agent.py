@@ -62,16 +62,19 @@ async def heartbeat(
     update_payload = None
     obsolete = bool(agent_version) and agent_version != LATEST_AGENT_VERSION
     wants_update = bool(server.update_requested) or (server.auto_update_enabled and obsolete)
+    # Don't keep retrying a failed auto-update forever: a 'failed' status sticks
+    # until the operator explicitly requests an update again (update_requested).
+    if server.update_status == "failed" and not server.update_requested:
+        wants_update = False
     if wants_update:
         sha = agent_package_sha256()
-        if sha:
+        if sha:  # never instruct an update without an integrity hash
             update_payload = {
                 "version": LATEST_AGENT_VERSION,
                 "download_url": agent_download_url(),
                 "sha256": sha,
             }
-            # mark as updating (cleared by /update-done)
-            server.update_status = "updating"
+            server.update_status = "updating"  # cleared by /update-done
     elif not obsolete and server.update_status == "updating":
         # Self-heal: agent is on the latest version but status was left 'updating'
         server.update_status = "idle"
@@ -257,13 +260,18 @@ async def update_check(
 ):
     """Fallback poll used by the root systemd timer. Tells the agent whether to
     self-update (newer version published, or UI requested it)."""
+    sha = agent_package_sha256()
     obsolete = current.strip() != LATEST_AGENT_VERSION
     should_update = bool(server.update_requested) or (server.auto_update_enabled and obsolete)
+    if server.update_status == "failed" and not server.update_requested:
+        should_update = False
+    if not sha:  # never instruct an update without an integrity hash
+        should_update = False
     return {
         "should_update": should_update,
         "latest_version": LATEST_AGENT_VERSION,
         "download_url": _agent_download_url(),
-        "sha256": agent_package_sha256(),
+        "sha256": sha,
     }
 
 
@@ -275,6 +283,8 @@ async def update_done(
     server: Server = Depends(get_server_by_token),
 ):
     """Agent reports the result of an update attempt."""
+    if version and not re.match(r"^\d+\.\d+\.\d+$", version):
+        raise HTTPException(status_code=400, detail="Invalid version format")
     if success:
         if version:
             server.agent_version = version

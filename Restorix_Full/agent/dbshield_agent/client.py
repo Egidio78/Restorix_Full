@@ -57,7 +57,8 @@ class AgentClient:
         return self._report(run_id, "failed", error_message=error_message)
 
     def _report(self, run_id: str, status: str, **kwargs) -> bool:
-        payload = {"status": status, "agent_version": "1.0.0", **kwargs}
+        from dbshield_agent import __version__
+        payload = {"status": status, "agent_version": __version__, **kwargs}
         delays = [3, 8, 20]
         for attempt in range(len(delays) + 1):
             try:

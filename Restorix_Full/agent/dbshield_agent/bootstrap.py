@@ -32,11 +32,15 @@ TOKEN=$("${PY}" -c "import json;print(json.load(open('${CONFIG}'))['agent_token'
 CURRENT=$("${PY}" -c "from dbshield_agent import __version__;print(__version__)" 2>/dev/null || echo "0.0.0")
 
 URL=""; SHA=""; VERSION=""
+# Lock-rename the trigger so a failed run doesn't loop re-processing it.
 if [ -f "${TRIGGER}" ]; then
-    URL=$("${PY}" -c "import json;print(json.load(open('${TRIGGER}')).get('download_url',''))" 2>/dev/null)
-    SHA=$("${PY}" -c "import json;print(json.load(open('${TRIGGER}')).get('sha256',''))" 2>/dev/null)
-    VERSION=$("${PY}" -c "import json;print(json.load(open('${TRIGGER}')).get('version',''))" 2>/dev/null)
-    rm -f "${TRIGGER}"
+    mv "${TRIGGER}" "${TRIGGER}.processing" 2>/dev/null || true
+fi
+if [ -f "${TRIGGER}.processing" ]; then
+    URL=$("${PY}" -c "import json;print(json.load(open('${TRIGGER}.processing')).get('download_url',''))" 2>/dev/null)
+    SHA=$("${PY}" -c "import json;print(json.load(open('${TRIGGER}.processing')).get('sha256',''))" 2>/dev/null)
+    VERSION=$("${PY}" -c "import json;print(json.load(open('${TRIGGER}.processing')).get('version',''))" 2>/dev/null)
+    rm -f "${TRIGGER}.processing"
 else
     RESP=$(curl -sf --max-time 20 "${API}/api/v1/agent/update-check?token=${TOKEN}&current=${CURRENT}") || exit 0
     SHOULD=$(printf '%s' "${RESP}" | "${PY}" -c "import sys,json;print(json.load(sys.stdin).get('should_update'))" 2>/dev/null)
@@ -45,6 +49,10 @@ else
     SHA=$(printf '%s' "${RESP}" | "${PY}" -c "import sys,json;print(json.load(sys.stdin).get('sha256',''))" 2>/dev/null)
     VERSION=$(printf '%s' "${RESP}" | "${PY}" -c "import sys,json;print(json.load(sys.stdin).get('latest_version',''))" 2>/dev/null)
 fi
+# Normalise the Python None-stringified values
+[ "${URL}" = "None" ] && URL=""
+[ "${SHA}" = "None" ] && SHA=""
+[ "${VERSION}" = "None" ] && VERSION=""
 [ -n "${URL}" ] || exit 0
 
 case "${URL}" in http*) FULL="${URL}" ;; *) FULL="${API}${URL}" ;; esac
@@ -83,8 +91,14 @@ if systemctl is-active --quiet "${SERVICE}" && [ -n "${NEW}" ]; then
     echo "[restorix-update] updated to ${NEW}"
 else
     echo "[restorix-update] agent did not start, rolling back"
-    [ -d "${BACKUP}" ] && [ -n "${SITEPKG}" ] && { rm -rf "${SITEPKG}"; cp -a "${BACKUP}" "${SITEPKG}"; systemctl restart "${SERVICE}"; }
-    rm -rf "${BACKUP}"
+    if [ -d "${BACKUP}" ] && [ -n "${SITEPKG}" ]; then
+        rm -rf "${SITEPKG}"; cp -a "${BACKUP}" "${SITEPKG}"
+        if systemctl restart "${SERVICE}"; then
+            rm -rf "${BACKUP}"
+        else
+            echo "[restorix-update] CRITICAL: rollback restart failed, backup kept at ${BACKUP}"
+        fi
+    fi
     report_fail
 fi
 '''
