@@ -19,8 +19,11 @@ class ServerOut(BaseModel):
     status: AgentStatus
     is_active: bool
     update_requested: bool = False
+    auto_update_enabled: bool = True
+    update_status: str = "idle"
     latest_version: str = ""
     update_available: bool = False
+    update_badge: str = "unknown"
 
     model_config = {"from_attributes": True}
 

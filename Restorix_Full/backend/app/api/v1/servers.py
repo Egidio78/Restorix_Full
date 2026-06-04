@@ -247,6 +247,7 @@ async def request_agent_update(
         raise HTTPException(status_code=404, detail="Server not found")
 
     server.update_requested = True
+    server.update_status = "updating"
     db.add(server)
     await db.commit()
     await db.refresh(server)
@@ -260,6 +261,37 @@ async def request_agent_update(
         metadata={"name": server.name},
         request=request,
     )
+    return server
+
+
+class AutoUpdatePayload(_BaseModel):
+    enabled: bool
+
+
+@router.patch("/{server_id}/auto-update", response_model=ServerOut)
+async def set_auto_update(
+    server_id: uuid.UUID,
+    payload: AutoUpdatePayload,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Toggle automatic agent updates for a server."""
+    if current_user.role not in ("superadmin", "admin", "operator"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    result = await db.execute(
+        select(Server).where(
+            Server.id == server_id,
+            Server.org_id == _get_org_id(current_user),
+            Server.is_active == True,
+        )
+    )
+    server = result.scalar_one_or_none()
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+    server.auto_update_enabled = payload.enabled
+    db.add(server)
+    await db.commit()
+    await db.refresh(server)
     return server
 
 

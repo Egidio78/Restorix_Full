@@ -9,6 +9,29 @@ from dbshield_agent.client import AgentClient
 from dbshield_agent.config import load_config
 from dbshield_agent.executor import execute_job
 
+# Trigger file written for the root updater (watched by a systemd path-unit).
+UPDATE_TRIGGER_DIR = "/run/restorix-agent"
+UPDATE_TRIGGER_FILE = os.path.join(UPDATE_TRIGGER_DIR, "update.json")
+
+
+def _request_self_update(update: dict, logger) -> None:
+    """Write the update instruction for the root updater. The non-root agent can't
+    restart its own systemd service, so a root path-unit consumes this file."""
+    import json
+    if not update.get("download_url") or not update.get("sha256"):
+        return
+    if os.path.exists(UPDATE_TRIGGER_FILE):
+        return  # an update is already queued
+    try:
+        os.makedirs(UPDATE_TRIGGER_DIR, exist_ok=True)
+        tmp = UPDATE_TRIGGER_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(update, f)
+        os.replace(tmp, UPDATE_TRIGGER_FILE)
+        logger.info("Self-update queued: v%s", update.get("version"))
+    except Exception as e:
+        logger.warning("Could not queue self-update: %s", e)
+
 
 def setup_logging(level: str) -> None:
     logging.basicConfig(
@@ -34,9 +57,12 @@ def main() -> None:
     while True:
         try:
             if heartbeat_interval <= 0:
-                ok = client.heartbeat(agent_version=__version__)
-                if ok:
+                hb = client.heartbeat(agent_version=__version__)
+                if hb is not None:
                     logger.debug("Heartbeat OK")
+                    update = hb.get("update") if isinstance(hb, dict) else None
+                    if update:
+                        _request_self_update(update, logger)
                 else:
                     logger.warning("Heartbeat failed -- platform unreachable?")
                 heartbeat_interval = config.poll_interval_seconds

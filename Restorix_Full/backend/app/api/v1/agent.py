@@ -49,13 +49,40 @@ async def heartbeat(
     db: AsyncSession = Depends(get_db),
     server: Server = Depends(get_server_by_token),
 ):
-    """Agent calls this every 30s to signal its alive."""
+    """Agent calls this every 30s. Response may include an `update` instruction
+    (heartbeat-driven auto-update): the agent acts on it within ~30s."""
+    from app.core.agent_release import (
+        LATEST_AGENT_VERSION, agent_package_sha256, agent_download_url,
+    )
+
     server.status = AgentStatus.online
     if agent_version:
         server.agent_version = agent_version
+
+    update_payload = None
+    obsolete = bool(agent_version) and agent_version != LATEST_AGENT_VERSION
+    wants_update = bool(server.update_requested) or (server.auto_update_enabled and obsolete)
+    if wants_update:
+        sha = agent_package_sha256()
+        if sha:
+            update_payload = {
+                "version": LATEST_AGENT_VERSION,
+                "download_url": agent_download_url(),
+                "sha256": sha,
+            }
+            # mark as updating (cleared by /update-done)
+            server.update_status = "updating"
+    elif not obsolete and server.update_status == "updating":
+        # Self-heal: agent is on the latest version but status was left 'updating'
+        server.update_status = "idle"
+
     db.add(server)
     await db.commit()
-    return {"status": "ok", "server_id": str(server.id)}
+
+    resp = {"status": "ok", "server_id": str(server.id)}
+    if update_payload:
+        resp["update"] = update_payload
+    return resp
 
 
 @router.get("/jobs")
@@ -206,11 +233,9 @@ async def report_run(
     return {"status": "ok", "run_id": str(run_id)}
 
 
-from app.core.agent_release import LATEST_AGENT_VERSION, AGENT_PACKAGE_FILENAME
-
-
-def _agent_download_url() -> str:
-    return f"/agent/{AGENT_PACKAGE_FILENAME}"
+from app.core.agent_release import (
+    LATEST_AGENT_VERSION, agent_download_url as _agent_download_url, agent_package_sha256,
+)
 
 
 @router.get("/version")
@@ -219,6 +244,7 @@ async def agent_version():
     return {
         "version": LATEST_AGENT_VERSION,
         "download_url": _agent_download_url(),
+        "sha256": agent_package_sha256(),
         "install_url": "/install.sh",
     }
 
@@ -229,31 +255,34 @@ async def update_check(
     db: AsyncSession = Depends(get_db),
     server: Server = Depends(get_server_by_token),
 ):
-    """Called by the agent updater (root systemd timer). Tells the agent whether
-    it should self-update: either a newer version is published, or an update was
-    requested from the web UI."""
-    should_update = bool(server.update_requested) or (current.strip() != LATEST_AGENT_VERSION)
+    """Fallback poll used by the root systemd timer. Tells the agent whether to
+    self-update (newer version published, or UI requested it)."""
+    obsolete = current.strip() != LATEST_AGENT_VERSION
+    should_update = bool(server.update_requested) or (server.auto_update_enabled and obsolete)
     return {
         "should_update": should_update,
         "latest_version": LATEST_AGENT_VERSION,
         "download_url": _agent_download_url(),
+        "sha256": agent_package_sha256(),
     }
-
-
-class UpdateDonePayload(BaseModel):
-    version: str | None = None
 
 
 @router.post("/update-done")
 async def update_done(
     version: str | None = Query(default=None),
+    success: bool = Query(default=True),
     db: AsyncSession = Depends(get_db),
     server: Server = Depends(get_server_by_token),
 ):
-    """Agent reports it finished updating; clear the request flag and record version."""
-    if version:
-        server.agent_version = version
-    server.update_requested = False
+    """Agent reports the result of an update attempt."""
+    if success:
+        if version:
+            server.agent_version = version
+        server.update_requested = False
+        server.update_status = "idle"
+    else:
+        server.update_status = "failed"
+        server.update_requested = False
     db.add(server)
     await db.commit()
     return {"status": "ok"}

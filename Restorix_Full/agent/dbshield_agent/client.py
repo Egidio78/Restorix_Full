@@ -16,17 +16,24 @@ class AgentClient:
     def _url(self, path: str) -> str:
         return f"{self.config.api_url}/api/v1/agent{path}"
 
-    def heartbeat(self, agent_version: str = "1.0.0") -> bool:
+    def heartbeat(self, agent_version: str = "1.0.0") -> dict | None:
+        """Returns the parsed heartbeat response (may contain an 'update' block),
+        or None if the platform is unreachable."""
         try:
             r = self.session.post(
                 self._url("/heartbeat"),
                 params={"token": self.config.agent_token, "agent_version": agent_version},
                 timeout=10,
             )
-            return r.status_code == 200
+            if r.status_code == 200:
+                try:
+                    return r.json()
+                except Exception:
+                    return {"status": "ok"}
+            return None
         except Exception as e:
             logger.warning(f"Heartbeat failed: {e}")
-            return False
+            return None
 
     def get_pending_jobs(self) -> list:
         try:

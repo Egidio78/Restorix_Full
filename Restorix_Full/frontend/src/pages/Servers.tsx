@@ -22,6 +22,9 @@ interface Server {
   update_requested?: boolean
   latest_version?: string
   update_available?: boolean
+  auto_update_enabled?: boolean
+  update_status?: string
+  update_badge?: "up_to_date" | "available" | "updating" | "failed" | "unknown"
 }
 
 interface DbInstance {
@@ -416,13 +419,28 @@ export default function Servers() {
   const { data: servers = [], isLoading } = useQuery<Server[]>({
     queryKey: ["servers"],
     queryFn: () => api.get("/servers/").then(r => r.data),
-    refetchInterval: 30000,
+    refetchInterval: 5000,
   })
 
   const updateAgentMutation = useMutation({
     mutationFn: (id: string) => api.post(`/servers/${id}/request-update`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["servers"] }),
   })
+
+  const autoUpdateMutation = useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      api.patch(`/servers/${id}/auto-update`, { enabled }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["servers"] }),
+  })
+
+  const updateBadge = (s: Server) => {
+    const b = s.update_badge ?? "unknown"
+    if (b === "updating") return <Badge variant="warning" className="text-[10px] px-1.5 py-0">🔵 In aggiornamento…</Badge>
+    if (b === "failed") return <Badge variant="destructive" className="text-[10px] px-1.5 py-0">🔴 Update fallito</Badge>
+    if (b === "available") return <Badge variant="warning" className="text-[10px] px-1.5 py-0">🟡 v{s.latest_version} disponibile</Badge>
+    if (b === "up_to_date") return <Badge variant="success" className="text-[10px] px-1.5 py-0 bg-rx-accent/15 text-rx-accent border-rx-accent/30">🟢 Aggiornato</Badge>
+    return null
+  }
 
   const addMutation = useMutation({
     mutationFn: (data: typeof form) => api.post("/servers/", data),
@@ -506,15 +524,17 @@ export default function Servers() {
                       </div>
                       <p className="text-sm text-muted-foreground">{server.hostname}</p>
                       {server.agent_version && (
-                        <p className="text-xs text-muted-foreground/70 flex items-center gap-1.5">
+                        <p className="text-xs text-muted-foreground/70 flex items-center gap-1.5 flex-wrap">
                           Agente v{server.agent_version}
-                          {server.update_requested ? (
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">aggiornamento in corso…</Badge>
-                          ) : server.update_available ? (
-                            <Badge variant="warning" className="text-[10px] px-1.5 py-0">
-                              v{server.latest_version} disponibile
-                            </Badge>
-                          ) : null}
+                          {updateBadge(server)}
+                          <button
+                            type="button"
+                            title={server.auto_update_enabled ? "Auto-update attivo — click per disattivare" : "Auto-update disattivo — click per attivare"}
+                            onClick={() => autoUpdateMutation.mutate({ id: server.id, enabled: !server.auto_update_enabled })}
+                            className={`text-[10px] px-1.5 py-0 rounded border ${server.auto_update_enabled ? "border-rx-accent/30 text-rx-accent" : "border-muted-foreground/30 text-muted-foreground"}`}
+                          >
+                            auto-update: {server.auto_update_enabled ? "ON" : "OFF"}
+                          </button>
                         </p>
                       )}
                     </div>
@@ -532,16 +552,16 @@ export default function Servers() {
                     <Button variant="outline" size="sm" onClick={() => setShowInstall(server)}>
                       Installa agente
                     </Button>
-                    {server.agent_version && (
+                    {server.agent_version && server.update_badge !== "up_to_date" && (
                       <Button
                         variant="outline"
                         size="sm"
                         title="Aggiorna l'agente all'ultima versione"
-                        disabled={server.update_requested || updateAgentMutation.isPending}
+                        disabled={server.update_badge === "updating" || updateAgentMutation.isPending}
                         onClick={() => updateAgentMutation.mutate(server.id)}
                       >
-                        <RefreshCw className={`h-3.5 w-3.5 mr-1 ${server.update_requested ? "animate-spin" : ""}`} />
-                        {server.update_requested ? "In corso…" : "Aggiorna"}
+                        <RefreshCw className={`h-3.5 w-3.5 mr-1 ${server.update_badge === "updating" ? "animate-spin" : ""}`} />
+                        {server.update_badge === "updating" ? "In corso…" : "Aggiorna ora"}
                       </Button>
                     )}
                     <Button variant="ghost" size="icon" title="Rigenera token" disabled={rotateMutation.isPending} onClick={() => {

@@ -31,6 +31,8 @@ class Server(Base, TimestampMixin):
     )
     agent_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
     update_requested: Mapped[bool] = mapped_column(default=False, nullable=False)
+    auto_update_enabled: Mapped[bool] = mapped_column(default=True, nullable=False)
+    update_status: Mapped[str] = mapped_column(String(20), default="idle", nullable=False)
     status: Mapped[AgentStatus] = mapped_column(
         SAEnum(AgentStatus, name="agentstatus", create_type=False),
         nullable=False,
@@ -54,3 +56,14 @@ class Server(Base, TimestampMixin):
     def update_available(self) -> bool:
         from app.core.agent_release import LATEST_AGENT_VERSION
         return bool(self.agent_version) and self.agent_version != LATEST_AGENT_VERSION
+
+    @property
+    def update_badge(self) -> str:
+        """UI badge state: updating | failed | available | up_to_date | unknown."""
+        if self.update_status == "updating" or self.update_requested:
+            return "updating"
+        if self.update_status == "failed":
+            return "failed"
+        if not self.agent_version:
+            return "unknown"
+        return "available" if self.update_available else "up_to_date"
