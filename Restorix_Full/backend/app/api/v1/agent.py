@@ -6,8 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import re
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from app.database import get_db
+from app.core.paths import normalize_remote_path
 from app.models.server import Server, AgentStatus
 from app.models.backup_job import BackupJob
 from app.models.backup_run import BackupRun, RunStatus
@@ -31,9 +32,6 @@ async def get_server_by_token(
     return server
 
 
-_FILE_PATH_RE = re.compile(r'^[A-Za-z0-9/_\-\.]+$')
-
-
 class RunReport(BaseModel):
     status: str  # "success" | "failed"
     size_bytes: int | None = None
@@ -41,6 +39,20 @@ class RunReport(BaseModel):
     checksum_sha256: str | None = None
     error_message: str | None = None
     agent_version: str | None = None
+
+    @field_validator('file_path')
+    @classmethod
+    def validate_file_path(cls, v: str | None) -> str | None:
+        if not v:
+            return v
+        if len(v) > 1000:
+            raise ValueError("file_path too long (max 1000)")
+        if re.search(r'[\x00-\x1f]', v):
+            raise ValueError("file_path contains control characters")
+        normalized = v.replace('\\', '/')
+        if any(part == '..' for part in normalized.split('/')):
+            raise ValueError("file_path contains traversal")
+        return normalized
 
 
 @router.post("/heartbeat")
@@ -211,15 +223,18 @@ async def report_run(
     if run.status != RunStatus.running:
         raise HTTPException(status_code=409, detail=f"Run is in state '{run.status}', expected 'running'")
 
-    # Fix #4: validate file_path to prevent path traversal
-    if payload.file_path is not None:
-        if not _FILE_PATH_RE.match(payload.file_path) or ".." in payload.file_path:
-            raise HTTPException(status_code=400, detail="Invalid file_path")
+    # Validation already in RunReport. Normalize for cross-platform (Windows agents).
+    try:
+        normalized_file_path = (
+            normalize_remote_path(payload.file_path) if payload.file_path else None
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid file_path: {e}")
 
     run.status = RunStatus.success if payload.status == "success" else RunStatus.failed
     run.finished_at = datetime.now(timezone.utc)
     run.size_bytes = payload.size_bytes
-    run.file_path = payload.file_path
+    run.file_path = normalized_file_path
     run.checksum_sha256 = payload.checksum_sha256
     run.error_message = payload.error_message
 
@@ -310,8 +325,23 @@ class DiscoveryRequestOut(BaseModel):
 
 
 class DiscoveryReportPayload(BaseModel):
-    databases: list[str] = []
-    error: str | None = None
+    databases: list[str] = Field(default_factory=list, max_length=500)
+    error: str | None = Field(default=None, max_length=2000)
+
+    @field_validator('databases')
+    @classmethod
+    def _validate_databases(cls, v: list[str]) -> list[str]:
+        out: list[str] = []
+        for name in v:
+            if not isinstance(name, str):
+                raise ValueError("database name must be string")
+            s = name.strip()
+            if not s:
+                continue
+            if len(s) > 255:
+                raise ValueError("database name too long (max 255)")
+            out.append(s)
+        return out
 
 
 @router.get("/discovery")

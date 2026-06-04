@@ -10,9 +10,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse, FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from app.api.deps import get_current_user
 from app.database import get_db
+from app.core.paths import normalize_remote_path
 from app.models.user import User
 from app.models.server import Server, AgentStatus
 from app.models.backup_job import BackupJob
@@ -73,6 +74,20 @@ class RunReport(BaseModel):
     checksum_sha256: str | None = None
     error_message: str | None = None
     agent_version: str | None = None
+
+    @field_validator('file_path')
+    @classmethod
+    def validate_file_path(cls, v: str | None) -> str | None:
+        if not v:
+            return v
+        if len(v) > 1000:
+            raise ValueError("file_path too long (max 1000)")
+        if re.search(r'[\x00-\x1f]', v):
+            raise ValueError("file_path contains control characters")
+        normalized = v.replace('\\', '/')
+        if any(part == '..' for part in normalized.split('/')):
+            raise ValueError("file_path contains traversal")
+        return normalized
 
 
 @router.post("/heartbeat", response_model=HeartbeatResponse)
@@ -402,10 +417,20 @@ async def report_run(
     if not job or job.server_id != server.id:
         raise HTTPException(status_code=403, detail="Run does not belong to this server")
 
+    # Cross-platform: Windows agents may report backslash / drive-letter paths.
+    # Normalize before persisting so storage operations always see canonical
+    # forward-slash paths (storage backends require forward slashes).
+    try:
+        normalized_file_path = (
+            normalize_remote_path(payload.file_path) if payload.file_path else None
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid file_path: {e}")
+
     run.status = RunStatus.success if payload.status == "success" else RunStatus.failed
     run.finished_at = datetime.now(timezone.utc)
     run.size_bytes = payload.size_bytes
-    run.file_path = payload.file_path
+    run.file_path = normalized_file_path
     run.checksum_sha256 = payload.checksum_sha256
     run.error_message = payload.error_message
 
@@ -555,8 +580,23 @@ class DiscoveryRequestOut(BaseModel):
 
 
 class DiscoveryReportPayload(BaseModel):
-    databases: list[str] = []
-    error: str | None = None
+    databases: list[str] = Field(default_factory=list, max_length=500)
+    error: str | None = Field(default=None, max_length=2000)
+
+    @field_validator('databases')
+    @classmethod
+    def _validate_databases(cls, v: list[str]) -> list[str]:
+        out: list[str] = []
+        for name in v:
+            if not isinstance(name, str):
+                raise ValueError("database name must be string")
+            s = name.strip()
+            if not s:
+                continue
+            if len(s) > 255:
+                raise ValueError("database name too long (max 255)")
+            out.append(s)
+        return out
 
 
 @router.get("/discovery")
