@@ -17,7 +17,12 @@ class FtpStreamer(BaseStreamer):
     def head_size(self, remote_path: str) -> int:
         ftp = self._connect()
         try:
-            return ftp.size(remote_path) or 0
+            size = ftp.size(remote_path)
+            if size is None:
+                raise FileNotFoundError(
+                    f"Remote file not found or SIZE unsupported: {remote_path}"
+                )
+            return size
         finally:
             ftp.quit()
 

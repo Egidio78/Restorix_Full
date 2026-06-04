@@ -65,8 +65,12 @@ def _build_filters(stmt, *, org_filter, from_, to, user_id, action, q):
     if action:
         stmt = stmt.where(AuditLog.action == action)
     if q:
-        like = f'%{q}%'
-        stmt = stmt.where(or_(AuditLog.metadata_json.ilike(like), AuditLog.action.ilike(like)))
+        q_escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        like = f'%{q_escaped}%'
+        stmt = stmt.where(or_(
+            AuditLog.metadata_json.ilike(like, escape="\\"),
+            AuditLog.action.ilike(like, escape="\\"),
+        ))
     return stmt
 
 

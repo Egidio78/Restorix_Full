@@ -177,6 +177,7 @@ async def _send_notifications_async(run_id: str):
 def _send_email(settings, config: dict, subject: str, body: str):
     """Send email via SMTP."""
     import smtplib
+    import ssl
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
 
@@ -196,13 +197,19 @@ def _send_email(settings, config: dict, subject: str, body: str):
     msg["To"] = to_addr
     msg.attach(MIMEText(body, "plain", "utf-8"))
 
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as s:
-        s.ehlo()
-        if smtp_port != 465:
+    if smtp_port == 465:
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP_SSL(smtp_host, smtp_port, context=ctx, timeout=10) as s:
+            if smtp_user:
+                s.login(smtp_user, smtp_pass)
+            s.send_message(msg)
+    else:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as s:
+            s.ehlo()
             s.starttls()
-        if smtp_user:
-            s.login(smtp_user, smtp_pass)
-        s.send_message(msg)
+            if smtp_user:
+                s.login(smtp_user, smtp_pass)
+            s.send_message(msg)
 
 
 def _send_webhook(config: dict, run, job, is_success: bool):

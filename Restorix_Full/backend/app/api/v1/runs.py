@@ -228,7 +228,11 @@ async def download_run(
     )
 
     service = RestoreService(db)
-    response = await service.generate_response(run, decrypt=decrypt, background_tasks=background_tasks)
+    try:
+        response = await service.generate_response(run, decrypt=decrypt, background_tasks=background_tasks)
+    except Exception as _exc:
+        _logger.error("generate_response failed: %s", _exc, exc_info=True)
+        raise
 
     # Audit: download served
     st = run.job.storage_destination.storage_type
@@ -276,8 +280,7 @@ async def send_run_to_temp(
     if run.job.org_id != current_user.org_id and role_val != 'superadmin':
         raise HTTPException(status_code=403, detail='Forbidden')
 
-    status_str = str(run.status).lower()
-    if status_str not in ('success', 'runstatus.success'):
+    if run.status != RunStatus.success:
         raise HTTPException(status_code=400, detail='Run is not successful')
 
     if run.retention_purged:

@@ -17,7 +17,7 @@ interface RunItem {
 }
 
 function formatBytes(bytes: number | null): string {
-  if (!bytes) return "—"
+  if (bytes === null || bytes === undefined) return "—"
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`

@@ -283,7 +283,7 @@ async def create_database(
         event_type=EventType.DBINSTANCE_CREATED,
         target_type="db_instance", target_id=str(dbi.id),
         description=f"Created DB instance {dbi.name} on server {srv.name}",
-        metadata={"name": dbi.name, "server_id": str(server_id), "connection_string": dbi.connection_string},
+        metadata={"name": dbi.name, "server_id": str(server_id)},
         request=request,
     )
 

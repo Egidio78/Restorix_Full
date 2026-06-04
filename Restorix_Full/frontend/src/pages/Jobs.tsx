@@ -558,7 +558,7 @@ export default function Jobs() {
                   mssql_native_compression: editForm.mssql_native_compression,
                   encryption_enabled: editForm.encryption_enabled,
                 }
-                if (editJob.backup_type === "mssql" && editForm.db_instance_id) {
+                if ((editJob.backup_type === "mssql" || editJob.backup_type === "mysql") && editForm.db_instance_id) {
                   payload.db_instance_id = editForm.db_instance_id
                 }
                 if (editJob.backup_type === "folder" && editForm.folder_path) {

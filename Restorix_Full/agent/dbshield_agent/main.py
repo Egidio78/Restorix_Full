@@ -45,7 +45,10 @@ def main() -> None:
             if jobs:
                 logger.info(f"Got {len(jobs)} pending job(s)")
                 for job in jobs:
-                    execute_job(job, config, client)
+                    try:
+                        execute_job(job, config, client)
+                    except Exception as e:
+                        logger.error(f"Unhandled error processing job: {e}")
             else:
                 logger.debug("No pending jobs")
 

@@ -11,6 +11,7 @@ from app.schemas.user import UserOut
 from app.api.deps import get_current_user
 from app.services.audit import log_event, EventType
 from app.config import get_settings
+from app.core.rate_limit import limiter
 import pyotp
 import uuid
 import io
@@ -42,6 +43,7 @@ async def _safe_audit(db, **kwargs):
 
 
 @router.post("/login")
+@limiter.limit("10/minute")
 async def login(
     payload: LoginRequest,
     response: Response,
@@ -75,16 +77,28 @@ async def login(
             raise HTTPException(status_code=500, detail="2FA configuration error")
         secret = decrypt(user.two_fa_secret_enc)
         totp = pyotp.TOTP(secret)
-        if not totp.verify(payload.totp_code, valid_window=1):
-            await _safe_audit(
-                db,
-                org_id=user.org_id, user_id=user.id,
-                event_type=EventType.AUTH_LOGIN_FAILED,
-                description="Login failed (invalid 2FA code)",
-                metadata={"email": payload.email, "reason": "invalid_2fa"},
-                request=request,
-            )
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid 2FA code")
+        totp_ok = totp.verify(payload.totp_code, valid_window=1)
+        if not totp_ok:
+            used_backup = False
+            if user.two_fa_backup_codes_enc:
+                codes = [c.strip() for c in decrypt(user.two_fa_backup_codes_enc).split(",") if c.strip()]
+                codes_upper = [c.upper() for c in codes]
+                submitted = (payload.totp_code or "").strip().upper()
+                if submitted in codes_upper:
+                    codes_upper.remove(submitted)
+                    user.two_fa_backup_codes_enc = encrypt(",".join(codes_upper))
+                    db.add(user)
+                    used_backup = True
+            if not used_backup:
+                await _safe_audit(
+                    db,
+                    org_id=user.org_id, user_id=user.id,
+                    event_type=EventType.AUTH_LOGIN_FAILED,
+                    description="Login failed (invalid 2FA code)",
+                    metadata={"email": payload.email, "reason": "invalid_2fa"},
+                    request=request,
+                )
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid 2FA code")
 
     settings = get_settings()
     access_token = create_access_token(subject=str(user.id), role=user.role)
@@ -115,8 +129,10 @@ async def login(
 
 
 @router.post("/refresh")
+@limiter.limit("20/minute")
 async def refresh(
     response: Response,
+    request: Request,
     refresh_token: str | None = Cookie(default=None),
     db: AsyncSession = Depends(get_db),
 ):

@@ -99,10 +99,18 @@ async def get_pending_jobs(
         storage = job.storage_destination
 
         if not storage:
+            run.status = RunStatus.failed
+            run.error_message = "Storage destination not found or deleted"
+            run.finished_at = datetime.now(timezone.utc)
+            db.add(run)
             continue
         backup_type_value = job.backup_type.value if hasattr(job.backup_type, "value") else str(job.backup_type)
         if backup_type_value in ("mssql", "mysql") and not dbi:
-            continue  # skip DB jobs without a linked database instance
+            run.status = RunStatus.failed
+            run.error_message = "Database instance not found or not linked"
+            run.finished_at = datetime.now(timezone.utc)
+            db.add(run)
+            continue
 
         db_creds = {}
         if dbi and dbi.credentials_enc:

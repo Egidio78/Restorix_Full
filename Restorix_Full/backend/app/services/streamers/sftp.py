@@ -1,3 +1,5 @@
+import socket as _socket
+
 import paramiko
 from pathlib import Path
 
@@ -6,7 +8,11 @@ from app.services.streamers.base import BaseStreamer
 
 class SftpStreamer(BaseStreamer):
     def _connect(self):
-        transport = paramiko.Transport((self.config["host"], int(self.config.get("port", 22))))
+        host = self.config["host"]
+        port = int(self.config.get("port", 22))
+        sock = _socket.create_connection((host, port), timeout=30)
+        transport = paramiko.Transport(sock)
+        transport.banner_timeout = 30
         transport.connect(username=self.config["username"], password=self.config["password"])
         return paramiko.SFTPClient.from_transport(transport), transport
 

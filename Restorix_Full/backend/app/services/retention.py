@@ -59,7 +59,26 @@ class RetentionService:
             storage_type = storage.storage_type.value if hasattr(storage.storage_type, "value") else storage.storage_type
             config = decrypt_storage_config(storage.config_enc)
             uploader = get_uploader(storage_type, config)
-            uploader.delete(run.file_path)
+            try:
+                uploader.delete(run.file_path)
+            except Exception as del_exc:  # noqa: BLE001
+                # If the remote file no longer exists, the purge goal is already
+                # achieved — treat "not found"/404 as success instead of retrying forever.
+                msg = str(del_exc).lower()
+                not_found = (
+                    isinstance(del_exc, FileNotFoundError)
+                    or "not found" in msg
+                    or "404" in msg
+                    or "no such file" in msg
+                    or "nosuchkey" in msg
+                    or "does not exist" in msg
+                )
+                if not not_found:
+                    raise
+                logger.info(
+                    "Remote file %s already absent during purge of run %s; treating as success",
+                    run.file_path, run.id,
+                )
             run.retention_purged = True
             run.retention_purged_at = datetime.utcnow()
             run.retention_purge_error = None
@@ -187,7 +206,9 @@ class RetentionService:
                 failed += 1
                 if run.purge_abandoned:
                     abandoned += 1
-        await self.db.commit()
+            # Commit after each run so a crash never leaves a deleted file with
+            # retention_purged still False (or loses attempt counters).
+            await self.db.commit()
 
         return PurgeReport(
             org_id=str(org_id),

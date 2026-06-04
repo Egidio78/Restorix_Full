@@ -1,5 +1,6 @@
 from __future__ import annotations
 import logging
+import time
 import requests
 from dbshield_agent.config import AgentConfig
 
@@ -49,18 +50,24 @@ class AgentClient:
         return self._report(run_id, "failed", error_message=error_message)
 
     def _report(self, run_id: str, status: str, **kwargs) -> bool:
-        try:
-            payload = {"status": status, "agent_version": "1.0.0", **kwargs}
-            r = self.session.post(
-                self._url(f"/runs/{run_id}"),
-                params={"token": self.config.agent_token},
-                json=payload,
-                timeout=15,
-            )
-            return r.status_code == 200
-        except Exception as e:
-            logger.warning(f"report failed: {e}")
-            return False
+        payload = {"status": status, "agent_version": "1.0.0", **kwargs}
+        delays = [3, 8, 20]
+        for attempt in range(len(delays) + 1):
+            try:
+                r = self.session.post(
+                    self._url(f"/runs/{run_id}"),
+                    params={"token": self.config.agent_token},
+                    json=payload,
+                    timeout=15,
+                )
+                if r.status_code == 200:
+                    return True
+                logger.warning(f"report returned {r.status_code}, attempt {attempt+1}")
+            except Exception as e:
+                logger.warning(f"report failed (attempt {attempt+1}): {e}")
+            if attempt < len(delays):
+                time.sleep(delays[attempt])
+        return False
 
     def get_discovery_request(self):
         try:

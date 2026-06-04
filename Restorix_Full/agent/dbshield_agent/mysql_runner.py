@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import threading
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -70,10 +71,16 @@ def create_mysql_backup(
         "--triggers",
     ]
     if username:
-        dump_cmd += ["-u", username, f"-p{password}"]
+        dump_cmd += ["-u", username]
     dump_cmd.append(db_name)
 
     gzip_cmd = ["gzip", "-c"]
+
+    # Pass MySQL password via env var (MYSQL_PWD) instead of argv to avoid
+    # exposing it in `ps aux`.
+    env = os.environ.copy()
+    if password:
+        env["MYSQL_PWD"] = password
 
     logger.info("Starting MySQL backup: %s/%s → %s", host, db_name, out_path)
 
@@ -83,6 +90,7 @@ def create_mysql_backup(
                 dump_cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                env=env,
             )
             gzip_proc = subprocess.Popen(
                 gzip_cmd,
@@ -92,17 +100,33 @@ def create_mysql_backup(
             )
             dump_proc.stdout.close()  # allow dump_proc to receive SIGPIPE if gzip exits
 
+            # Drain mysqldump stderr in a separate thread to avoid pipe deadlock
+            # when many warnings fill the PIPE buffer.
+            stderr_box = []
+
+            def _drain():
+                try:
+                    stderr_box.append(dump_proc.stderr.read())
+                except Exception:
+                    stderr_box.append(b"")
+
+            _t = threading.Thread(target=_drain, daemon=True)
+            _t.start()
+
             gzip_proc.wait(timeout=7200)  # 2 ore max
             dump_proc.wait(timeout=10)
+            _t.join(timeout=5)
 
         if dump_proc.returncode != 0:
-            stderr = dump_proc.stderr.read().decode(errors="replace")
+            stderr = (stderr_box[0] if stderr_box else b"").decode(errors="replace")
             raise RuntimeError(f"mysqldump failed (exit {dump_proc.returncode}): {stderr.strip()}")
 
         if gzip_proc.returncode != 0:
             raise RuntimeError(f"gzip failed (exit {gzip_proc.returncode})")
 
         size = os.path.getsize(out_path)
+        if size == 0:
+            raise RuntimeError("MySQL backup file is empty (0 bytes) — backup failed")
         logger.info("MySQL backup completed: %s (%.1f MB)", out_path, size / 1024 / 1024)
         return out_path
 

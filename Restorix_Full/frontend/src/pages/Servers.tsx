@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Plus, Server as ServerIcon, RefreshCw, Trash2, Copy, Check, Database, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -62,6 +62,14 @@ function DatabasesModal({ server, onClose }: { server: Server; onClose: () => vo
   const [discoverError, setDiscoverError] = useState("")
   const [selectedDbs, setSelectedDbs] = useState<Set<string>>(new Set())
 
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mountedRef = useRef(true)
+
+  useEffect(() => () => {
+    mountedRef.current = false
+    if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
+  }, [])
+
   const { data: dbs = [], isLoading } = useQuery<DbInstance[]>({
     queryKey: ["databases", server.id],
     queryFn: () => api.get(`/servers/${server.id}/databases`).then(r => r.data),
@@ -104,6 +112,7 @@ function DatabasesModal({ server, onClose }: { server: Server; onClose: () => vo
       await api.post(`/servers/${server.id}/discover`, discoverForm)
       const startedAt = Date.now()
       const poll = async () => {
+        if (!mountedRef.current) return
         if (Date.now() - startedAt > 90_000) {
           setDiscoverError("Timeout: l'agente non ha risposto entro 90 secondi")
           setDiscovering(false)
@@ -111,6 +120,7 @@ function DatabasesModal({ server, onClose }: { server: Server; onClose: () => vo
         }
         try {
           const res = await api.get(`/servers/${server.id}/discovery`)
+          if (!mountedRef.current) return
           if (res.data.status === "ready") {
             if (res.data.error) {
               setDiscoverError(res.data.error)
@@ -121,9 +131,10 @@ function DatabasesModal({ server, onClose }: { server: Server; onClose: () => vo
             return
           }
         } catch {}
-        setTimeout(poll, 2000)
+        if (!mountedRef.current) return
+        pollTimerRef.current = setTimeout(poll, 2000)
       }
-      setTimeout(poll, 2000)
+      pollTimerRef.current = setTimeout(poll, 2000)
     } catch {
       setDiscoverError("Errore avvio discovery")
       setDiscovering(false)
@@ -131,18 +142,22 @@ function DatabasesModal({ server, onClose }: { server: Server; onClose: () => vo
   }
 
   const registerSelected = async () => {
-    for (const dbName of selectedDbs) {
-      await api.post(`/servers/${server.id}/databases`, {
-        name: dbName,
-        connection_string: discoverForm.connection_string,
-        username: discoverForm.username,
-        password: discoverForm.password,
-      })
+    try {
+      for (const dbName of selectedDbs) {
+        await api.post(`/servers/${server.id}/databases`, {
+          name: dbName,
+          connection_string: discoverForm.connection_string,
+          username: discoverForm.username,
+          password: discoverForm.password,
+        })
+      }
+      qc.invalidateQueries({ queryKey: ["databases", server.id] })
+      setShowDiscover(false)
+      setDiscovered(null)
+      setSelectedDbs(new Set())
+    } catch (e: any) {
+      setDiscoverError(e?.response?.data?.detail ?? "Errore durante la registrazione dei database")
     }
-    qc.invalidateQueries({ queryKey: ["databases", server.id] })
-    setShowDiscover(false)
-    setDiscovered(null)
-    setSelectedDbs(new Set())
   }
 
   return (
@@ -499,7 +514,9 @@ export default function Servers() {
                     <Button variant="outline" size="sm" onClick={() => setShowInstall(server)}>
                       Installa agente
                     </Button>
-                    <Button variant="ghost" size="icon" title="Rigenera token" onClick={() => rotateMutation.mutate(server.id)}>
+                    <Button variant="ghost" size="icon" title="Rigenera token" disabled={rotateMutation.isPending} onClick={() => {
+                      if (confirm("Rigenerare il token? L'agente attuale si disconnetterà e dovrai reinstallarlo col nuovo token.")) rotateMutation.mutate(server.id)
+                    }}>
                       <RefreshCw className="h-4 w-4" />
                     </Button>
                     <Button variant="ghost" size="icon" title="Elimina" className="text-destructive hover:text-destructive" onClick={() => {

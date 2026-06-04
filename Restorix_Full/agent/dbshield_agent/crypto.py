@@ -9,8 +9,19 @@ logger = logging.getLogger(__name__)
 
 def compress_file(input_path: str) -> str:
     output_path = input_path + ".gz"
-    with open(input_path, "rb") as f_in, gzip.open(output_path, "wb") as f_out:
-        shutil.copyfileobj(f_in, f_out)
+    try:
+        with open(input_path, "rb") as f_in, gzip.open(output_path, "wb") as f_out:
+            shutil.copyfileobj(f_in, f_out)
+        if os.path.getsize(output_path) == 0:
+            raise RuntimeError(f"Compressed file is empty (0 bytes): {output_path}")
+    except Exception:
+        # Compression failed: remove partial .gz, leave original intact
+        if os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except OSError:
+                pass
+        raise
     os.remove(input_path)
     logger.info(f"Compressed: {output_path}")
     return output_path
@@ -33,11 +44,22 @@ def encrypt_file(input_path: str, password: str) -> str:
 
     ciphertext = aesgcm.encrypt(nonce, plaintext, None)
 
-    with open(output_path, "wb") as f:
-        f.write(b"DSH1")
-        f.write(salt)
-        f.write(nonce)
-        f.write(ciphertext)
+    try:
+        with open(output_path, "wb") as f:
+            f.write(b"DSH1")
+            f.write(salt)
+            f.write(nonce)
+            f.write(ciphertext)
+        if os.path.getsize(output_path) == 0:
+            raise RuntimeError(f"Encrypted file is empty (0 bytes): {output_path}")
+    except Exception:
+        # Encryption write failed: remove partial .enc, leave original intact
+        if os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except OSError:
+                pass
+        raise
 
     os.remove(input_path)
     logger.info(f"Encrypted: {output_path}")

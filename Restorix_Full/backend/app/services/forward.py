@@ -69,7 +69,17 @@ class ForwardService:
             # Upload
             uploader.upload(temp_file, target_remote_path)
 
-            # On move: delete source AFTER upload OK
+            # Verify upload integrity: confirm the target file size matches the
+            # locally downloaded file before considering the upload successful.
+            target_streamer = get_streamer(target_type_str, target_config)
+            remote_size = target_streamer.head_size(target_remote_path)
+            if remote_size != size_bytes:
+                raise RuntimeError(
+                    f"Upload integrity check failed for {target_remote_path}: "
+                    f"local size {size_bytes} != remote size {remote_size}"
+                )
+
+            # On move: delete source AFTER upload OK and verified
             source_deleted = False
             if mode == "move":
                 source_uploader = get_uploader(source_type_str, source_config)

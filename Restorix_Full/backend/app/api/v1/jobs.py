@@ -9,6 +9,8 @@ from app.database import get_db
 from app.models.backup_job import BackupJob
 from app.models.backup_run import BackupRun, RunStatus, TriggerType
 from app.models.server import Server
+from app.models.storage import StorageDestination
+from app.models.db_instance import DbInstance
 from app.models.user import User
 from app.schemas.backup import BackupJobCreate, BackupJobUpdate, BackupJobOut, BackupRunOut
 from app.api.deps import get_current_user
@@ -71,6 +73,10 @@ async def create_job(
         raise HTTPException(status_code=400, detail="db_instance_id required for database backup")
     if payload.backup_type == "folder" and not payload.folder_path:
         raise HTTPException(status_code=400, detail="folder_path required for folder backup")
+
+    storage = await db.get(StorageDestination, payload.storage_destination_id)
+    if not storage or storage.org_id != _org_id(current_user):
+        raise HTTPException(status_code=400, detail="Invalid storage_destination_id")
 
     enc_password = None
     if payload.encryption_enabled and payload.encryption_password:
@@ -139,6 +145,15 @@ async def update_job(
     job = await db.get(BackupJob, job_id)
     if not job or job.org_id != _org_id(current_user):
         raise HTTPException(status_code=404, detail="Job not found")
+
+    if payload.db_instance_id is not None:
+        dbi = await db.get(DbInstance, payload.db_instance_id)
+        if not dbi or dbi.server_id != job.server_id:
+            raise HTTPException(status_code=400, detail="Invalid db_instance_id")
+    if payload.storage_destination_id is not None:
+        st = await db.get(StorageDestination, payload.storage_destination_id)
+        if not st or st.org_id != _org_id(current_user):
+            raise HTTPException(status_code=400, detail="Invalid storage_destination_id")
 
     if payload.name is not None:
         job.name = payload.name

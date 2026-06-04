@@ -17,21 +17,25 @@ async def _redis_client():
 
 async def store_request(server_id: uuid.UUID, connection_string: str, username: str, password: str, engine: str = "mssql") -> None:
     r = await _redis_client()
-    payload = encrypt(json.dumps({
-        "connection_string": connection_string,
-        "username": username,
-        "password": password,
-        "engine": engine,
-    }))
-    await r.setex(f"{REQUEST_KEY_PREFIX}{server_id}", TTL_SECONDS, payload)
-    await r.delete(f"{RESULT_KEY_PREFIX}{server_id}")
-    await r.aclose()
+    try:
+        payload = encrypt(json.dumps({
+            "connection_string": connection_string,
+            "username": username,
+            "password": password,
+            "engine": engine,
+        }))
+        await r.setex(f"{REQUEST_KEY_PREFIX}{server_id}", TTL_SECONDS, payload)
+        await r.delete(f"{RESULT_KEY_PREFIX}{server_id}")
+    finally:
+        await r.aclose()
 
 
 async def get_request_for_agent(server_id: uuid.UUID) -> dict | None:
     r = await _redis_client()
-    payload = await r.get(f"{REQUEST_KEY_PREFIX}{server_id}")
-    await r.aclose()
+    try:
+        payload = await r.get(f"{REQUEST_KEY_PREFIX}{server_id}")
+    finally:
+        await r.aclose()
     if not payload:
         return None
     try:
@@ -42,21 +46,27 @@ async def get_request_for_agent(server_id: uuid.UUID) -> dict | None:
 
 async def consume_request(server_id: uuid.UUID) -> None:
     r = await _redis_client()
-    await r.delete(f"{REQUEST_KEY_PREFIX}{server_id}")
-    await r.aclose()
+    try:
+        await r.delete(f"{REQUEST_KEY_PREFIX}{server_id}")
+    finally:
+        await r.aclose()
 
 
 async def store_result(server_id: uuid.UUID, databases: list[str], error: str | None) -> None:
     r = await _redis_client()
-    payload = json.dumps({"databases": databases, "error": error})
-    await r.setex(f"{RESULT_KEY_PREFIX}{server_id}", TTL_SECONDS, payload)
-    await r.aclose()
+    try:
+        payload = json.dumps({"databases": databases, "error": error})
+        await r.setex(f"{RESULT_KEY_PREFIX}{server_id}", TTL_SECONDS, payload)
+    finally:
+        await r.aclose()
 
 
 async def get_result(server_id: uuid.UUID) -> dict | None:
     r = await _redis_client()
-    payload = await r.get(f"{RESULT_KEY_PREFIX}{server_id}")
-    await r.aclose()
+    try:
+        payload = await r.get(f"{RESULT_KEY_PREFIX}{server_id}")
+    finally:
+        await r.aclose()
     if not payload:
         return None
     try:

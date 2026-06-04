@@ -37,6 +37,8 @@ def create_backup(mssql_instance: str, db_name: str, username: str, password: st
 
     if not os.path.exists(bak_file):
         raise RuntimeError(f"Backup file not created: {bak_file}")
+    if os.path.getsize(bak_file) == 0:
+        raise RuntimeError(f"Backup file is empty (0 bytes): {bak_file}")
 
     logger.info(f"Backup created: {bak_file} ({os.path.getsize(bak_file)} bytes)")
     return bak_file

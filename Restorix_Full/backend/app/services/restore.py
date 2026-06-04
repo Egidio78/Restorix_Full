@@ -71,12 +71,16 @@ class RestoreService:
             logger.warning("Cleanup failed for %s: %s", path, e)
 
     async def _iter_file(self, path: Path) -> AsyncIterator[bytes]:
-        with open(path, "rb") as f:
+        import asyncio
+        f = await asyncio.to_thread(open, path, "rb")
+        try:
             while True:
-                chunk = f.read(CHUNK_SIZE)
+                chunk = await asyncio.to_thread(f.read, CHUNK_SIZE)
                 if not chunk:
                     break
                 yield chunk
+        finally:
+            await asyncio.to_thread(f.close)
 
     async def generate_response(
         self,
@@ -225,6 +229,7 @@ class RestoreService:
                 else downloaded_name + ".dec"
             )
             final_path = folder / final_name
+            decrypt_ok = False
             try:
                 if not run.job.encryption_password_enc:
                     raise HTTPException(
@@ -233,10 +238,14 @@ class RestoreService:
                     )
                 password = decrypt_str(run.job.encryption_password_enc)
                 decrypt_file_aesgcm(encrypted_local, final_path, password)
+                decrypt_ok = True
             finally:
                 # Fix #7: always cleanup encrypted temp file, even if decrypt fails
                 if final_path != encrypted_local:
                     self._cleanup(encrypted_local)
+                # Fix #6: remove partial decrypted output if decrypt failed
+                if not decrypt_ok and final_path != encrypted_local and final_path.exists():
+                    self._cleanup(final_path)
         t1 = perf_counter()
 
         size_final = final_path.stat().st_size if final_path.exists() else 0
