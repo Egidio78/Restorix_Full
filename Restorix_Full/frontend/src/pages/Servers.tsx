@@ -463,16 +463,30 @@ function AgentManageModal({ server, onClose }: { server: Server; onClose: () => 
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" disabled={enqueue.isPending} onClick={() => enqueue.mutate({ action: "healthcheck" })}>Diagnostica</Button>
-            <Button size="sm" variant="outline" disabled={enqueue.isPending} onClick={() => enqueue.mutate({ action: "collect_logs" })}>Vedi log</Button>
-            <Button size="sm" variant="outline" disabled={enqueue.isPending} onClick={() => enqueue.mutate({ action: "install_deps", params: { deps: [isMysql ? "mysql" : "mssql"] } })}>Installa dipendenze</Button>
-            <Button size="sm" variant="outline" disabled={enqueue.isPending} onClick={() => { if (confirm("Riavviare l'agente?")) enqueue.mutate({ action: "restart_agent" }) }}>Riavvia agente</Button>
-            <Button size="sm" variant="outline" disabled={enqueue.isPending} onClick={() => { if (confirm("Riparare l'agente (ripristina plumbing)?")) enqueue.mutate({ action: "repair" }) }}>Ripara</Button>
+          <div className="border rounded-lg divide-y">
+            {[
+              { action: "healthcheck", label: "Diagnostica", desc: "Mostra versione agente, sistema operativo, dipendenze installate (mysqldump/sqlcmd), spazio disco e configurazione.", btn: "Esegui", confirm: null, params: undefined as any },
+              { action: "collect_logs", label: "Vedi log", desc: "Recupera le ultime righe del log dell'agente per la diagnostica, senza collegarti al server.", btn: "Recupera", confirm: null, params: undefined },
+              { action: "install_deps", label: "Installa dipendenze", desc: isMysql ? "Installa sul server gli strumenti MySQL (mysqldump, client) se mancanti." : "Installa sul server gli strumenti SQL Server (sqlcmd) se mancanti.", btn: "Installa", confirm: null, params: { deps: [isMysql ? "mysql" : "mssql"] } },
+              { action: "restart_agent", label: "Riavvia agente", desc: "Riavvia il servizio dell'agente sul server. Utile se sembra bloccato.", btn: "Riavvia", confirm: "Riavviare l'agente sul server?", params: undefined },
+              { action: "repair", label: "Ripara agente", desc: "Ricrea i file di sistema dell'agente (servizi systemd, updater) e lo riavvia. Da usare se l'agente non risponde più ai comandi.", btn: "Ripara", confirm: "Eseguire la riparazione dell'agente?", params: undefined },
+            ].map(a => (
+              <div key={a.action} className="flex items-start justify-between gap-3 p-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium">{a.label}</div>
+                  <div className="text-[11px] text-muted-foreground/80">{a.desc}</div>
+                </div>
+                <Button size="sm" variant="outline" className="shrink-0" disabled={enqueue.isPending}
+                  onClick={() => { if (!a.confirm || confirm(a.confirm)) enqueue.mutate({ action: a.action, params: a.params }) }}>
+                  {a.btn}
+                </Button>
+              </div>
+            ))}
           </div>
 
           <div className="border rounded-lg p-3 space-y-2">
             <Label className="text-xs font-semibold">Test connessione database</Label>
+            <p className="text-[11px] text-muted-foreground/80">Verifica che l'agente riesca a connettersi al database selezionato con le credenziali salvate (senza fare un backup).</p>
             <div className="flex gap-2">
               <Select value={testDbId} onValueChange={setTestDbId}>
                 <SelectTrigger className="flex-1"><SelectValue placeholder={dbs.length ? "Seleziona database..." : "Nessun DB registrato"} /></SelectTrigger>
@@ -486,6 +500,7 @@ function AgentManageModal({ server, onClose }: { server: Server; onClose: () => 
 
           <div className="border rounded-lg p-3 space-y-2">
             <Label className="text-xs font-semibold">Modifica configurazione</Label>
+            <p className="text-[11px] text-muted-foreground/80">Cambia i parametri dell'agente da remoto. Polling = ogni quanti secondi contatta la piattaforma; Log level = dettaglio dei log; Cartella temp = dove crea i file di backup prima dell'upload. L'agente si riavvia per applicare.</p>
             <div className="grid grid-cols-3 gap-2">
               <div>
                 <Label className="text-[11px]">Polling (s)</Label>
