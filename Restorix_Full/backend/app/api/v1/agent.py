@@ -314,6 +314,84 @@ async def update_done(
     return {"status": "ok"}
 
 
+# ── Remote agent commands ─────────────────────────────────
+from app.models.agent_command import AgentCommand
+
+
+@router.get("/commands")
+async def get_pending_command(
+    db: AsyncSession = Depends(get_db),
+    server: Server = Depends(get_server_by_token),
+):
+    """Agent polls this each cycle. Returns the oldest pending command (marked
+    running) for this server, or null."""
+    result = await db.execute(
+        select(AgentCommand)
+        .where(AgentCommand.server_id == server.id, AgentCommand.status == "pending")
+        .order_by(AgentCommand.created_at.asc())
+        .limit(1)
+        .with_for_update(skip_locked=True)
+    )
+    cmd = result.scalar_one_or_none()
+    if not cmd:
+        await db.commit()
+        return None
+    cmd.status = "running"
+    cmd.started_at = datetime.now(timezone.utc)
+    db.add(cmd)
+    await db.commit()
+    return {"id": str(cmd.id), "action": cmd.action, "params": cmd.params or {}}
+
+
+class CommandResult(BaseModel):
+    success: bool = True
+    result: str | None = None
+
+
+@router.get("/db-credentials/{db_instance_id}")
+async def get_db_credentials(
+    db_instance_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    server: Server = Depends(get_server_by_token),
+):
+    """Return decrypted DB credentials for a db_instance on this server (used by
+    the test_db command). Token-authed; only the owning server can fetch them."""
+    dbi = await db.get(DbInstance, db_instance_id)
+    if not dbi or dbi.server_id != server.id:
+        raise HTTPException(status_code=404, detail="Database instance not found")
+    creds = {}
+    if dbi.credentials_enc:
+        try:
+            creds = json.loads(decrypt(dbi.credentials_enc))
+        except Exception:
+            pass
+    return {
+        "engine": server.engine or "mssql",
+        "connection_string": dbi.connection_string,
+        "username": creds.get("username", ""),
+        "password": creds.get("password", ""),
+    }
+
+
+@router.post("/commands/{command_id}/result")
+async def report_command_result(
+    command_id: uuid.UUID,
+    payload: CommandResult,
+    db: AsyncSession = Depends(get_db),
+    server: Server = Depends(get_server_by_token),
+):
+    """Agent reports the outcome of a command."""
+    cmd = await db.get(AgentCommand, command_id)
+    if not cmd or cmd.server_id != server.id:
+        raise HTTPException(status_code=404, detail="Command not found")
+    cmd.status = "done" if payload.success else "failed"
+    cmd.result = (payload.result or "")[:20000]  # cap stored output
+    cmd.finished_at = datetime.now(timezone.utc)
+    db.add(cmd)
+    await db.commit()
+    return {"status": "ok"}
+
+
 # ── Discovery ─────────────────────────────────────────────
 from app.services import discovery as _discovery
 

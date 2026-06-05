@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Plus, Server as ServerIcon, RefreshCw, Trash2, Copy, Check, Database, Pencil } from "lucide-react"
+import { Plus, Server as ServerIcon, RefreshCw, Trash2, Copy, Check, Database, Pencil, Wrench } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -408,11 +408,157 @@ function DatabasesModal({ server, onClose }: { server: Server; onClose: () => vo
   )
 }
 
+interface AgentCommand {
+  id: string
+  action: string
+  status: "pending" | "running" | "done" | "failed"
+  result: string | null
+  created_at: string | null
+  finished_at: string | null
+}
+
+const ACTION_LABELS: Record<string, string> = {
+  healthcheck: "Diagnostica",
+  collect_logs: "Log agente",
+  test_db: "Test connessione DB",
+  install_deps: "Installa dipendenze",
+  restart_agent: "Riavvio agente",
+  repair: "Riparazione",
+  set_config: "Modifica config",
+}
+
+function AgentManageModal({ server, onClose }: { server: Server; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [testDbId, setTestDbId] = useState("")
+  const [pollInterval, setPollInterval] = useState("")
+  const [logLevel, setLogLevel] = useState("")
+  const [tempDir, setTempDir] = useState("")
+  const [expanded, setExpanded] = useState<string | null>(null)
+
+  const { data: commands = [] } = useQuery<AgentCommand[]>({
+    queryKey: ["agent-commands", server.id],
+    queryFn: () => api.get(`/servers/${server.id}/commands`).then(r => r.data),
+    refetchInterval: 4000,
+  })
+  const { data: dbs = [] } = useQuery<DbInstance[]>({
+    queryKey: ["databases", server.id],
+    queryFn: () => api.get(`/servers/${server.id}/databases`).then(r => r.data),
+  })
+
+  const enqueue = useMutation({
+    mutationFn: (body: { action: string; params?: any }) => api.post(`/servers/${server.id}/commands`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["agent-commands", server.id] }),
+  })
+
+  const isMysql = (server.engine ?? "mssql") === "mysql"
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Gestione agente — {server.name}</DialogTitle>
+          <DialogDescription>
+            I comandi vengono eseguiti dall'agente entro ~30s. Nessun accesso SSH richiesto.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" disabled={enqueue.isPending} onClick={() => enqueue.mutate({ action: "healthcheck" })}>Diagnostica</Button>
+            <Button size="sm" variant="outline" disabled={enqueue.isPending} onClick={() => enqueue.mutate({ action: "collect_logs" })}>Vedi log</Button>
+            <Button size="sm" variant="outline" disabled={enqueue.isPending} onClick={() => enqueue.mutate({ action: "install_deps", params: { deps: [isMysql ? "mysql" : "mssql"] } })}>Installa dipendenze</Button>
+            <Button size="sm" variant="outline" disabled={enqueue.isPending} onClick={() => { if (confirm("Riavviare l'agente?")) enqueue.mutate({ action: "restart_agent" }) }}>Riavvia agente</Button>
+            <Button size="sm" variant="outline" disabled={enqueue.isPending} onClick={() => { if (confirm("Riparare l'agente (ripristina plumbing)?")) enqueue.mutate({ action: "repair" }) }}>Ripara</Button>
+          </div>
+
+          <div className="border rounded-lg p-3 space-y-2">
+            <Label className="text-xs font-semibold">Test connessione database</Label>
+            <div className="flex gap-2">
+              <Select value={testDbId} onValueChange={setTestDbId}>
+                <SelectTrigger className="flex-1"><SelectValue placeholder={dbs.length ? "Seleziona database..." : "Nessun DB registrato"} /></SelectTrigger>
+                <SelectContent>
+                  {dbs.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Button size="sm" disabled={!testDbId || enqueue.isPending} onClick={() => enqueue.mutate({ action: "test_db", params: { db_instance_id: testDbId } })}>Testa</Button>
+            </div>
+          </div>
+
+          <div className="border rounded-lg p-3 space-y-2">
+            <Label className="text-xs font-semibold">Modifica configurazione</Label>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <Label className="text-[11px]">Polling (s)</Label>
+                <Input placeholder="30" value={pollInterval} onChange={e => setPollInterval(e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-[11px]">Log level</Label>
+                <Select value={logLevel} onValueChange={setLogLevel}>
+                  <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="INFO">INFO</SelectItem>
+                    <SelectItem value="DEBUG">DEBUG</SelectItem>
+                    <SelectItem value="WARNING">WARNING</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-[11px]">Cartella temp</Label>
+                <Input placeholder="/tmp/restorix" value={tempDir} onChange={e => setTempDir(e.target.value)} />
+              </div>
+            </div>
+            <Button size="sm" variant="restorix" disabled={enqueue.isPending || (!pollInterval && !logLevel && !tempDir)} onClick={() => {
+              const params: any = {}
+              if (pollInterval) params.poll_interval_seconds = parseInt(pollInterval)
+              if (logLevel) params.log_level = logLevel
+              if (tempDir) params.temp_dir = tempDir
+              enqueue.mutate({ action: "set_config", params })
+            }}>Applica configurazione</Button>
+          </div>
+
+          <div>
+            <Label className="text-xs font-semibold">Comandi recenti</Label>
+            <div className="divide-y border rounded-lg mt-1 max-h-72 overflow-y-auto">
+              {commands.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">Nessun comando</p>
+              ) : commands.map(c => (
+                <div key={c.id} className="p-2 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium">{ACTION_LABELS[c.action] ?? c.action}</span>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={c.status === "done" ? "success" : c.status === "failed" ? "destructive" : "warning"} className="text-[10px]">
+                        {c.status === "done" ? "✓ Completato" : c.status === "failed" ? "✗ Fallito" : c.status === "running" ? "In corso" : "In attesa"}
+                      </Badge>
+                      {c.result && (
+                        <button className="text-xs text-muted-foreground underline" onClick={() => setExpanded(expanded === c.id ? null : c.id)}>
+                          {expanded === c.id ? "nascondi" : "output"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {expanded === c.id && c.result && (
+                    <pre className="mt-2 text-[11px] bg-slate-900 text-slate-100 rounded p-2 overflow-x-auto whitespace-pre-wrap max-h-60">{c.result}</pre>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Chiudi</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export default function Servers() {
   const qc = useQueryClient()
   const [showAdd, setShowAdd] = useState(false)
   const [showInstall, setShowInstall] = useState<Server | null>(null)
   const [showDbs, setShowDbs] = useState<Server | null>(null)
+  const [showManage, setShowManage] = useState<Server | null>(null)
   const [form, setForm] = useState({ name: "", hostname: "", engine: "mssql" })
   const [error, setError] = useState("")
 
@@ -543,6 +689,9 @@ export default function Servers() {
                     <Button variant="outline" size="sm" onClick={() => setShowDbs(server)}>
                       <Database className="h-3.5 w-3.5 mr-1" /> Database
                     </Button>
+                    <Button variant="outline" size="sm" title="Gestione agente da remoto" onClick={() => setShowManage(server)}>
+                      <Wrench className="h-3.5 w-3.5 mr-1" /> Gestione
+                    </Button>
                     <Button variant="ghost" size="icon" title="Modifica" onClick={() => {
                       setShowEdit(server)
                       setEditForm({ name: server.name, hostname: server.hostname, engine: server.engine ?? "mssql" })
@@ -659,6 +808,7 @@ export default function Servers() {
       </Dialog>
 
       {showDbs && <DatabasesModal server={showDbs} onClose={() => setShowDbs(null)} />}
+      {showManage && <AgentManageModal server={showManage} onClose={() => setShowManage(null)} />}
 
       <Dialog open={!!showEdit} onOpenChange={() => setShowEdit(null)}>
         <DialogContent>

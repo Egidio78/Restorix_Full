@@ -36,9 +36,12 @@ def execute_job(job: dict, config: AgentConfig, client: AgentClient) -> None:
 
         elif backup_type == "mysql":
             from dbshield_agent.mysql_runner import create_mysql_backup
+            from dbshield_agent.commands import ensure_tool
             connection_string = job.get("connection_string", "")
             if not connection_string:
                 raise RuntimeError("connection_string missing for MySQL backup")
+            if not ensure_tool("mysqldump", "mysql", logger):
+                raise RuntimeError("mysqldump non disponibile e installazione automatica fallita")
             backup_file = create_mysql_backup(
                 connection_string=connection_string,
                 db_name=job["db_name"],
@@ -52,6 +55,9 @@ def execute_job(job: dict, config: AgentConfig, client: AgentClient) -> None:
 
         else:
             # mssql (default)
+            from dbshield_agent.commands import ensure_tool
+            if not ensure_tool("sqlcmd", "mssql", logger):
+                raise RuntimeError("sqlcmd non disponibile e installazione automatica fallita")
             native = job.get("mssql_native_compression", False)
             backup_file = create_backup(
                 mssql_instance=job.get("connection_string") or job.get("mssql_instance", ""),

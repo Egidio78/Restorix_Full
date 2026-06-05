@@ -159,6 +159,27 @@ Unit={SERVICE_NAME}-update.service
 WantedBy=timers.target
 '''
 
+COMMAND_SERVICE = f'''[Unit]
+Description=Restorix Agent Root Command Runner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart={INSTALL_DIR}/venv/bin/restorix-agent-root
+'''
+
+COMMAND_PATH = f'''[Unit]
+Description=Restorix Agent root command trigger watcher
+
+[Path]
+PathExists=/run/restorix-agent/command.json
+Unit={SERVICE_NAME}-command.service
+
+[Install]
+WantedBy=paths.target
+'''
+
 
 def _write(path: str, content: str, mode: int = 0o644) -> None:
     tmp = path + ".tmp"
@@ -180,11 +201,14 @@ def main() -> int:
     _write(f"/etc/systemd/system/{SERVICE_NAME}-update.service", UPDATE_SERVICE)
     _write(f"/etc/systemd/system/{SERVICE_NAME}-update.path", UPDATE_PATH)
     _write(f"/etc/systemd/system/{SERVICE_NAME}-update.timer", UPDATE_TIMER)
+    _write(f"/etc/systemd/system/{SERVICE_NAME}-command.service", COMMAND_SERVICE)
+    _write(f"/etc/systemd/system/{SERVICE_NAME}-command.path", COMMAND_PATH)
 
     subprocess.run(["systemctl", "daemon-reload"], check=False)
     subprocess.run(["systemctl", "enable", f"{SERVICE_NAME}.service"], check=False)
     subprocess.run(["systemctl", "enable", "--now", f"{SERVICE_NAME}-update.path"], check=False)
     subprocess.run(["systemctl", "enable", "--now", f"{SERVICE_NAME}-update.timer"], check=False)
+    subprocess.run(["systemctl", "enable", "--now", f"{SERVICE_NAME}-command.path"], check=False)
     if not no_restart:
         subprocess.run(["systemctl", "restart", f"{SERVICE_NAME}.service"], check=False)
     return 0

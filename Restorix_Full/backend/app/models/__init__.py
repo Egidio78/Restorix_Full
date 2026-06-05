@@ -8,6 +8,7 @@ from app.models.backup_job import BackupJob, BackupType
 from app.models.backup_run import BackupRun, RunStatus, TriggerType
 from app.models.notification import NotificationChannel, ChannelType
 from app.models.audit import AuditLog
+from app.models.agent_command import AgentCommand, AGENT_ACTIONS, ROOT_ACTIONS
 
 __all__ = [
     "Base",
@@ -20,4 +21,5 @@ __all__ = [
     "BackupRun", "RunStatus", "TriggerType",
     "NotificationChannel", "ChannelType",
     "AuditLog",
+    "AgentCommand", "AGENT_ACTIONS", "ROOT_ACTIONS",
 ]

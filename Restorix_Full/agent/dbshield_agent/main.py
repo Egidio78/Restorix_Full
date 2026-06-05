@@ -78,6 +78,15 @@ def main() -> None:
             else:
                 logger.debug("No pending jobs")
 
+            # Check for a pending management command
+            cmd = client.get_command()
+            if cmd:
+                from dbshield_agent.commands import handle_command
+                needs_restart = handle_command(cmd, config, client)
+                if needs_restart:
+                    logger.info("Config changed — exiting so systemd restarts with new config")
+                    sys.exit(0)
+
             # Check for discovery request
             discovery_req = client.get_discovery_request()
             if discovery_req:

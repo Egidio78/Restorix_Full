@@ -15,6 +15,7 @@ setup(
         "console_scripts": [
             "restorix-agent=dbshield_agent.main:main",
             "restorix-agent-bootstrap=dbshield_agent.bootstrap:main",
+            "restorix-agent-root=dbshield_agent.root_runner:main",
         ],
     },
 )

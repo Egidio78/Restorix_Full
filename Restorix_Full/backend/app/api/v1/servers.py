@@ -295,6 +295,118 @@ async def set_auto_update(
     return server
 
 
+# ── Remote agent management commands ──────────────────────
+from app.models.agent_command import AgentCommand, AGENT_ACTIONS
+
+
+class AgentCommandIn(_BaseModel):
+    action: str
+    params: dict | None = None
+
+
+class AgentCommandOut(_BaseModel):
+    id: uuid.UUID
+    action: str
+    params: dict | None = None
+    status: str
+    result: str | None = None
+    created_at: object | None = None
+    finished_at: object | None = None
+
+    model_config = {"from_attributes": True}
+
+
+@router.post("/{server_id}/commands", response_model=AgentCommandOut, status_code=201)
+async def enqueue_command(
+    server_id: uuid.UUID,
+    payload: AgentCommandIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Queue a whitelisted management command for the server's agent."""
+    if current_user.role not in ("superadmin", "admin", "operator"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    if payload.action not in AGENT_ACTIONS:
+        raise HTTPException(status_code=400, detail=f"Unknown action: {payload.action}")
+    result = await db.execute(
+        select(Server).where(
+            Server.id == server_id,
+            Server.org_id == _get_org_id(current_user),
+            Server.is_active == True,
+        )
+    )
+    server = result.scalar_one_or_none()
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    # Validate set_config params server-side
+    params = payload.params or {}
+    if payload.action == "set_config":
+        clean: dict = {}
+        if "poll_interval_seconds" in params:
+            try:
+                v = int(params["poll_interval_seconds"])
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="poll_interval_seconds must be an integer")
+            if not (10 <= v <= 3600):
+                raise HTTPException(status_code=400, detail="poll_interval_seconds must be 10..3600")
+            clean["poll_interval_seconds"] = v
+        if "log_level" in params:
+            lvl = str(params["log_level"]).upper()
+            if lvl not in ("DEBUG", "INFO", "WARNING", "ERROR"):
+                raise HTTPException(status_code=400, detail="invalid log_level")
+            clean["log_level"] = lvl
+        if "temp_dir" in params:
+            td = str(params["temp_dir"])
+            if not td.startswith("/") or ".." in td:
+                raise HTTPException(status_code=400, detail="temp_dir must be an absolute path without '..'")
+            clean["temp_dir"] = td
+        if not clean:
+            raise HTTPException(status_code=400, detail="no valid config fields provided")
+        params = clean
+
+    cmd = AgentCommand(
+        server_id=server.id,
+        action=payload.action,
+        params=params or None,
+        created_by_user_id=current_user.id,
+    )
+    db.add(cmd)
+    await db.commit()
+    await db.refresh(cmd)
+
+    await _safe_audit(
+        db,
+        org_id=current_user.org_id, user_id=current_user.id,
+        event_type=EventType.SERVER_UPDATED,
+        target_type="server", target_id=str(server.id),
+        description=f"Queued agent command '{payload.action}' for {server.name}",
+        metadata={"action": payload.action},
+        request=request,
+    )
+    return cmd
+
+
+@router.get("/{server_id}/commands", response_model=list[AgentCommandOut])
+async def list_commands(
+    server_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Recent management commands for a server's agent (newest first)."""
+    srv = await db.get(Server, server_id)
+    if not srv or srv.org_id != _get_org_id(current_user) or not srv.is_active:
+        raise HTTPException(status_code=404, detail="Server not found")
+    result = await db.execute(
+        select(AgentCommand)
+        .where(AgentCommand.server_id == server_id)
+        .order_by(AgentCommand.created_at.desc())
+        .limit(20)
+    )
+    return result.scalars().all()
+
+
 # ── DbInstances ───────────────────────────────────────────
 
 @router.get("/{server_id}/databases", response_model=list[DbInstanceOut])

@@ -103,3 +103,47 @@ class AgentClient:
         except Exception as e:
             logger.warning(f"report_discovery failed: {e}")
             return False
+
+    # ── Remote commands ──────────────────────────────────
+    def get_command(self):
+        """Return the next pending management command, or None."""
+        try:
+            r = self.session.get(
+                self._url("/commands"),
+                params={"token": self.config.agent_token},
+                timeout=10,
+            )
+            if r.status_code == 200:
+                return r.json()
+            return None
+        except Exception as e:
+            logger.warning(f"get_command failed: {e}")
+            return None
+
+    def report_command_result(self, command_id: str, success: bool, result: str = "") -> bool:
+        try:
+            r = self.session.post(
+                self._url(f"/commands/{command_id}/result"),
+                params={"token": self.config.agent_token},
+                json={"success": success, "result": result},
+                timeout=15,
+            )
+            return r.status_code == 200
+        except Exception as e:
+            logger.warning(f"report_command_result failed: {e}")
+            return False
+
+    def get_db_credentials(self, db_instance_id: str):
+        """Fetch decrypted DB credentials for a test_db command."""
+        try:
+            r = self.session.get(
+                self._url(f"/db-credentials/{db_instance_id}"),
+                params={"token": self.config.agent_token},
+                timeout=10,
+            )
+            if r.status_code == 200:
+                return r.json()
+            return None
+        except Exception as e:
+            logger.warning(f"get_db_credentials failed: {e}")
+            return None
