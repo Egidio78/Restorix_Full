@@ -1,0 +1,35 @@
+all:
+  children:
+    vps:
+      hosts:
+        vps-001:
+          ansible_host: 1.2.3.4
+          vps_id: vps-001
+          hostname: vps-001.example.com
+          cliente: "Rossi SpA"
+          os_name: Ubuntu
+          os_version: "22.04"
+          backup_folders:
+            - /home/Nativo
+            - /home/Nativo_1
+          backup_hour: 2
+          s3_access_key: "AKIAIOSFODNN7EXAMPLE"
+          s3_secret_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+          s3_bucket: backup-vps-001
+          restic_password: "changeme-strong-password"
+
+        vps-002:
+          ansible_host: 5.6.7.8
+          vps_id: vps-002
+          hostname: vps-002.example.com
+          cliente: "Bianchi & Co"
+          os_name: Ubuntu
+          os_version: "24.04"
+          backup_folders:
+            - /home/Nativo
+            - /home/GecomNativo
+          backup_hour: 2
+          s3_access_key: "AKIAI2SFODNN7EXAMPLE"
+          s3_secret_key: "wJalrXUtnFEMI/K8MDENG/bPxRfiCYEXAMPLEKEY"
+          s3_bucket: backup-vps-002
+          restic_password: "changeme-strong-password-2"

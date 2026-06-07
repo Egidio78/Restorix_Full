@@ -1,0 +1,23 @@
+---
+# Contabo S3 endpoint
+s3_endpoint: "https://eu2.contabostorage.com"
+
+# Master Service URL (VPS master)
+master_url: "https://backup-monitor.example.com"
+
+# MASTER_SECRET for API key derivation (same as master service)
+master_secret: "CHANGE_ME_STRONG_SECRET"
+
+# Restic binary version
+restic_version: "0.17.3"
+
+# TeamSystem service name (systemd)
+teamsystem_service: "teamsystem"
+
+# Retention policy
+restic_keep_daily: 7
+restic_keep_weekly: 4
+
+# Restore test config
+restore_test_hour: 3
+restore_test_minute: 30

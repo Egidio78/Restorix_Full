@@ -1,0 +1,8 @@
+---
+backup_hour: 2
+backup_minute: 0
+restore_test_hour: 3
+restore_test_minute: 30
+restic_env_dir: /etc/restic
+backup_script: /usr/local/bin/backup-teamsystem.sh
+restore_script: /usr/local/bin/restore-test-teamsystem.sh

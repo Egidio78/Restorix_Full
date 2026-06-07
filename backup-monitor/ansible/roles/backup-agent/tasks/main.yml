@@ -1,0 +1,95 @@
+---
+- name: Install restic dependencies
+  apt:
+    name:
+      - curl
+      - bzip2
+      - python3
+      - python3-pip
+      - bc
+    state: present
+    update_cache: yes
+
+- name: Download restic binary
+  get_url:
+    url: "https://github.com/restic/restic/releases/download/v{{ restic_version }}/restic_{{ restic_version }}_linux_amd64.bz2"
+    dest: /tmp/restic.bz2
+    mode: '0644'
+
+- name: Decompress restic
+  shell: bunzip2 -f /tmp/restic.bz2 && mv /tmp/restic /usr/local/bin/restic && chmod +x /usr/local/bin/restic
+  args:
+    creates: /usr/local/bin/restic
+
+- name: Create restic config directory
+  file:
+    path: "{{ restic_env_dir }}"
+    state: directory
+    mode: '0700'
+    owner: root
+    group: root
+
+- name: Deploy restic environment file
+  template:
+    src: restic.env.j2
+    dest: "{{ restic_env_dir }}/restic.env"
+    mode: '0600'
+    owner: root
+    group: root
+
+- name: Deploy backup script
+  template:
+    src: backup-teamsystem.sh.j2
+    dest: "{{ backup_script }}"
+    mode: '0750'
+    owner: root
+    group: root
+
+- name: Deploy restore test script
+  template:
+    src: restore-test-teamsystem.sh.j2
+    dest: "{{ restore_script }}"
+    mode: '0750'
+    owner: root
+    group: root
+
+- name: Initialize restic repository
+  shell: |
+    source {{ restic_env_dir }}/restic.env
+    restic snapshots --quiet 2>/dev/null || restic init
+  args:
+    executable: /bin/bash
+
+- name: Register VPS on Master Service
+  uri:
+    url: "{{ master_url }}/api/v1/servers/register"
+    method: POST
+    body_format: json
+    body:
+      vps_id: "{{ vps_id }}"
+      hostname: "{{ hostname }}"
+      cliente: "{{ cliente }}"
+      os_name: "{{ os_name | default('Ubuntu') }}"
+      os_version: "{{ os_version | default('') }}"
+      folders: "{{ backup_folders }}"
+      backup_hour: "{{ backup_hour }}"
+    headers:
+      x-api-key: "{{ master_secret | hash('sha256') }}{{ 'register' | hash('sha256') }}"
+    status_code: [200, 201]
+  ignore_errors: yes
+
+- name: Install backup cron job
+  cron:
+    name: "restic backup teamsystem"
+    minute: "{{ backup_minute }}"
+    hour: "{{ backup_hour }}"
+    job: "{{ backup_script }} >> /var/log/backup-teamsystem.log 2>&1"
+    user: root
+
+- name: Install restore test cron job
+  cron:
+    name: "restic restore test teamsystem"
+    minute: "{{ restore_test_minute }}"
+    hour: "{{ restore_test_hour }}"
+    job: "{{ restore_script }} >> /var/log/restore-test-teamsystem.log 2>&1"
+    user: root

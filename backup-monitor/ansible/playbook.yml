@@ -1,0 +1,6 @@
+---
+- name: Deploy Backup Agent TeamSystem
+  hosts: vps
+  become: yes
+  roles:
+    - backup-agent
