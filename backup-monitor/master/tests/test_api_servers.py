@@ -69,3 +69,28 @@ def test_latest_snapshot(client):
         headers={"x-api-key": api_key})
     assert r.status_code == 200
     assert r.json()["snapshot_id"] == "snap-xyz"
+
+def test_update_server_folders(client):
+    # Register first
+    client.post("/api/v1/servers/register",
+        json={"vps_id":"vps-001","hostname":"h1","folders":["/home/Nativo"]},
+        headers={"x-api-key": _reg_key()})
+    # Update folders via PUT with registration key
+    r = client.put("/api/v1/servers/vps-001",
+        json={"folders":["/home/Nativo","/home/Nativo_1","/home/GecomNativo"]},
+        headers={"x-api-key": _reg_key()})
+    assert r.status_code == 204
+    # Verify
+    r2 = client.get("/api/v1/servers/vps-001")
+    import json
+    folders = json.loads(r2.json()["server"]["folders"])
+    assert "/home/Nativo_1" in folders
+
+def test_update_server_unauthorized(client):
+    client.post("/api/v1/servers/register",
+        json={"vps_id":"vps-001","hostname":"h1"},
+        headers={"x-api-key": _reg_key()})
+    r = client.put("/api/v1/servers/vps-001",
+        json={"folders":["/home/Nativo"]},
+        headers={"x-api-key": "wrongkey"})
+    assert r.status_code == 401

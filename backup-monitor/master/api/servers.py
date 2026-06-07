@@ -71,6 +71,37 @@ def server_detail(vps_id: str):
         ).fetchall()
     return {"server": dict(server), "runs": [dict(r) for r in runs]}
 
+class UpdateServer(BaseModel):
+    hostname: str | None = None
+    cliente: str | None = None
+    os_name: str | None = None
+    os_version: str | None = None
+    folders: list[str] | None = None
+    backup_hour: int | None = None
+
+@router.put("/api/v1/servers/{vps_id}", status_code=204)
+def update_server(vps_id: str, payload: UpdateServer, x_api_key: str = Header(...)):
+    # Accept either the VPS's own api_key OR the registration key (for admin edits from dashboard)
+    reg_key = hashlib.sha256(f"{config.MASTER_SECRET}register".encode()).hexdigest()
+    vps_key = hashlib.sha256(f"{config.MASTER_SECRET}{vps_id}".encode()).hexdigest()
+    if x_api_key not in (reg_key, vps_key):
+        raise HTTPException(status_code=401, detail="Non autorizzato")
+    with db.get_db() as conn:
+        server = conn.execute("SELECT vps_id FROM servers WHERE vps_id=?", (vps_id,)).fetchone()
+        if not server:
+            raise HTTPException(status_code=404, detail="VPS non trovata")
+        updates = {}
+        if payload.hostname is not None: updates["hostname"] = payload.hostname
+        if payload.cliente is not None: updates["cliente"] = payload.cliente
+        if payload.os_name is not None: updates["os_name"] = payload.os_name
+        if payload.os_version is not None: updates["os_version"] = payload.os_version
+        if payload.folders is not None: updates["folders"] = json.dumps(payload.folders)
+        if payload.backup_hour is not None: updates["backup_hour"] = payload.backup_hour
+        if updates:
+            set_clause = ", ".join(f"{k}=?" for k in updates)
+            conn.execute(f"UPDATE servers SET {set_clause} WHERE vps_id=?",
+                         list(updates.values()) + [vps_id])
+
 @router.get("/api/v1/servers/{vps_id}/latest-snapshot")
 def latest_snapshot(vps_id: str, x_api_key: str = Header(...)):
     verify_api_key(vps_id, x_api_key)

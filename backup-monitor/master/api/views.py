@@ -146,6 +146,35 @@ def dashboard(request: Request, session: str | None = Cookie(default=None)):
         "servers": [dict(s) for s in servers],
     })
 
+@router.post("/servers/{vps_id}/edit")
+async def edit_server_form(vps_id: str, request: Request, session: str | None = Cookie(default=None)):
+    user = _get_current_user(session)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    form = await request.form()
+    # Parse folders: one per line, strip whitespace, remove empty lines
+    folders_raw = form.get("folders", "")
+    folders = [f.strip() for f in folders_raw.splitlines() if f.strip()]
+    hostname = form.get("hostname", "").strip()
+    cliente = form.get("cliente", "").strip()
+    backup_hour = form.get("backup_hour", "2").strip()
+    try:
+        backup_hour_int = int(backup_hour)
+    except ValueError:
+        backup_hour_int = 2
+    import json as _json
+    with db.get_db() as conn:
+        updates = {}
+        if hostname: updates["hostname"] = hostname
+        if cliente: updates["cliente"] = cliente
+        if folders: updates["folders"] = _json.dumps(folders)
+        updates["backup_hour"] = backup_hour_int
+        if updates:
+            set_clause = ", ".join(f"{k}=?" for k in updates)
+            conn.execute(f"UPDATE servers SET {set_clause} WHERE vps_id=?",
+                         list(updates.values()) + [vps_id])
+    return RedirectResponse(f"/servers/{vps_id}?saved=1", status_code=303)
+
 @router.get("/servers/{vps_id}", response_class=HTMLResponse)
 def server_detail(vps_id: str, request: Request, session: str | None = Cookie(default=None)):
     user = _get_current_user(session)

@@ -9,6 +9,7 @@
   <span class="text-secondary">{{ server.cliente }}</span>
   {{ server | os_badge | safe }}
   {% if runs %}{{ runs[0] | status_badge | safe }}{% endif %}
+  <button class="btn btn-secondary btn-sm" onclick="document.getElementById('editModal').style.display='flex'">&#9881;&#65039; Modifica config</button>
 </div>
 <div class="kpi-grid">
   <div class="card">
@@ -70,4 +71,44 @@
   {% endfor %}
   </tbody>
 </table>
+
+<!-- Edit config modal -->
+<div id="editModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:#161b22;border:1px solid #30363d;border-radius:10px;padding:28px;width:480px;max-width:95vw;">
+    <h3 style="margin:0 0 18px;color:#e6edf3;">&#9881;&#65039; Modifica configurazione &mdash; {{ server.vps_id }}</h3>
+    {% if request.query_params.get('saved') %}
+    <div style="background:#1a3a1a;border:1px solid #3fb950;border-radius:6px;padding:8px 14px;margin-bottom:14px;color:#3fb950;font-size:0.9em;">&#10003; Configurazione salvata.</div>
+    {% endif %}
+    <form method="post" action="/servers/{{ server.vps_id }}/edit">
+      <label style="display:block;color:#7d8590;font-size:0.8em;margin-bottom:4px;">HOSTNAME</label>
+      <input name="hostname" value="{{ server.hostname }}" style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px 10px;color:#e6edf3;margin-bottom:12px;">
+
+      <label style="display:block;color:#7d8590;font-size:0.8em;margin-bottom:4px;">CLIENTE</label>
+      <input name="cliente" value="{{ server.cliente }}" style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px 10px;color:#e6edf3;margin-bottom:12px;">
+
+      <label style="display:block;color:#7d8590;font-size:0.8em;margin-bottom:4px;">ORA BACKUP (0-23)</label>
+      <input name="backup_hour" type="number" min="0" max="23" value="{{ server.backup_hour }}" style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px 10px;color:#e6edf3;margin-bottom:12px;">
+
+      <label style="display:block;color:#7d8590;font-size:0.8em;margin-bottom:4px;">CARTELLE DI BACKUP (una per riga)</label>
+      <textarea name="folders" rows="5" style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px 10px;color:#e6edf3;font-family:monospace;font-size:0.9em;resize:vertical;margin-bottom:16px;">{{ server.folders | fromjson | join('\n') }}</textarea>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('editModal').style.display='none'">Annulla</button>
+        <button type="submit" class="btn btn-primary">&#128190; Salva</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+// Close modal on backdrop click
+document.getElementById('editModal').addEventListener('click', function(e) {
+  if (e.target === this) this.style.display = 'none';
+});
+// Auto-open if saved=1 in URL (show success message briefly)
+{% if request.query_params.get('saved') %}
+document.getElementById('editModal').style.display = 'flex';
+setTimeout(() => { document.getElementById('editModal').style.display = 'none'; }, 3000);
+{% endif %}
+</script>
 {% endblock %}
