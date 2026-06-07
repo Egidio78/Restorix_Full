@@ -1,8 +1,8 @@
-import hashlib
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional
-import db, config
+import db
+from api.utils import verify_api_key
 
 router = APIRouter()
 
@@ -13,15 +13,14 @@ class RestoreReport(BaseModel):
     duration_s: Optional[int] = None
     error_msg: Optional[str] = None
 
-def _verify_api_key(vps_id: str, api_key: str):
-    expected = hashlib.sha256(f"{config.MASTER_SECRET}{vps_id}".encode()).hexdigest()
-    if api_key != expected:
-        raise HTTPException(status_code=401, detail="API key non valida")
-
 @router.post("/api/v1/restore/report", status_code=204)
 def restore_report(report: RestoreReport, x_api_key: str = Header(...)):
-    _verify_api_key(report.vps_id, x_api_key)
+    verify_api_key(report.vps_id, x_api_key)
     with db.get_db() as conn:
+        server = conn.execute("SELECT vps_id FROM servers WHERE vps_id=?", (report.vps_id,)).fetchone()
+        if not server:
+            raise HTTPException(status_code=404, detail="VPS non registrata")
+
         last_run = conn.execute(
             "SELECT id FROM backup_runs WHERE vps_id=? ORDER BY id DESC LIMIT 1",
             (report.vps_id,)

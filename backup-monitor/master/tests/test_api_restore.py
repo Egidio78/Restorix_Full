@@ -55,6 +55,13 @@ def test_restore_links_to_latest_backup_run(client):
         ).fetchone()
     assert restore["backup_run_id"] == backup_run_id
 
+def test_restore_report_unknown_vps(fresh_db):
+    client = TestClient(_make_app())
+    r = client.post("/api/v1/restore/report",
+        json={"vps_id": "vps-999", "status": "ok"},
+        headers={"x-api-key": _api_key("vps-999")})
+    assert r.status_code == 404
+
 def test_restore_report_no_backup_run(client):
     # No backup runs exist; backup_run_id should be NULL
     r = client.post("/api/v1/restore/report",
