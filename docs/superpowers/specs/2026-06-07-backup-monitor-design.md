@@ -147,13 +147,56 @@ Variabili per server: hostname, IP, cartelle da backuppare, orario personalizzat
 
 ---
 
+## Autenticazione Dashboard
+
+La dashboard richiede autenticazione a prescindere dalla rete su cui è esposta.
+
+### Metodi di accesso supportati
+
+**1. Username + Password + TOTP (2FA)**
+- Password hashata con bcrypt (cost factor 12)
+- 2FA obbligatorio tramite TOTP (RFC 6238) — compatibile con Google Authenticator, Authy, 1Password, ecc.
+- Setup 2FA al primo accesso: QR code generato lato server, mai trasmesso in chiaro
+- Codici di recupero monouso (10 codici) generati al setup 2FA, mostrati una sola volta
+
+**2. Passkey (WebAuthn / FIDO2)**
+- Accesso passwordless tramite impronta digitale, Face ID, chiave hardware (YubiKey, ecc.)
+- Implementazione: libreria `py_webauthn` sul backend FastAPI
+- Registrazione passkey disponibile dal pannello profilo dopo il primo accesso con password
+- Possibilità di registrare più passkey per lo stesso account (es. laptop + telefono)
+
+### Flusso di accesso
+
+```
+Login page
+    ├── [Accedi con Passkey]  → challenge WebAuthn → dashboard
+    └── [Username + Password]
+            └── credenziali OK → richiesta codice TOTP → dashboard
+```
+
+### Sessioni
+
+- Sessione autenticata: cookie httpOnly + SameSite=Strict, durata 8 ore
+- Rinnovo silenzioso se attivo nelle ultime 2 ore
+- Logout esplicito invalida il cookie lato server (blocklist in SQLite)
+
+### Gestione utenti
+
+- Tabella `users` in SQLite: id, username, password_hash, totp_secret (cifrato), passkey_credentials (JSON)
+- Nessun sistema di registrazione pubblica — gli utenti sono creati via CLI sul Master Service:  
+  `python manage.py create-user --username admin`
+- Supporto multi-utente (es. amministratore + tecnico in sola lettura)
+
+---
+
 ## Sicurezza
 
-- Dashboard accessibile solo da rete interna (no auth richiesta internamente); se esposta su internet → autenticazione HTTP Basic o token
 - Link di download temporanei firmati con JWT (validità 24h)
 - Credenziali S3 per VPS mai in chiaro nei log
 - Repository restic cifrati con password (AES-256)
 - Comunicazione Master ↔ VPS via HTTPS (certificato self-signed o Let's Encrypt)
+- Rate limiting sul login: blocco temporaneo dopo 5 tentativi falliti in 10 minuti
+- Header di sicurezza HTTP: `Strict-Transport-Security`, `X-Frame-Options`, `Content-Security-Policy`
 
 ---
 
@@ -167,7 +210,8 @@ Variabili per server: hostname, IP, cartelle da backuppare, orario personalizzat
 | Master Service API | Python / FastAPI | ~500 righe |
 | Dashboard web | HTML/CSS/JS (Jinja2) | Server-side rendering, no framework JS |
 | Alert engine | Python (integrato nel Master) | Modulo separato |
-| DB schema | SQLite | 3 tabelle: servers, backup_runs, restore_runs |
+| DB schema | SQLite | 5 tabelle: servers, backup_runs, restore_runs, users, sessions |
+| Auth / WebAuthn | py_webauthn + PyOTP | Passkey + TOTP 2FA |
 
 ---
 
