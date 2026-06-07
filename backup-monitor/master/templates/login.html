@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Login — Backup Monitor{% endblock %}
+{% block content %}
+<div class="login-wrap">
+  <h2>Accedi</h2>
+  {% if error %}<div class="alert-error">{{ error }}</div>{% endif %}
+  <form method="post" action="/auth/login">
+    <label>Username</label>
+    <input name="username" type="text" autocomplete="username" required>
+    <label>Password</label>
+    <input name="password" type="password" autocomplete="current-password" required>
+    <label>Codice 2FA (TOTP)</label>
+    <input name="totp_code" type="text" inputmode="numeric" maxlength="6" placeholder="000000">
+    <button type="submit" class="btn btn-primary">Accedi</button>
+  </form>
+</div>
+{% endblock %}

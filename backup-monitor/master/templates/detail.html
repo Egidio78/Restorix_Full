@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ server.vps_id }} — Backup Monitor{% endblock %}
+{% block content %}
+<div style="margin-bottom:16px">
+  <a href="/" class="btn btn-secondary btn-sm">← Tutti i server</a>
+</div>
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+  <span class="monospace" style="font-size:1.2em;font-weight:700">{{ server.vps_id }}</span>
+  <span class="text-secondary">{{ server.cliente }}</span>
+  {{ server | os_badge | safe }}
+  {% if runs %}{{ runs[0] | status_badge | safe }}{% endif %}
+</div>
+<div class="kpi-grid">
+  <div class="card">
+    <div class="kpi-label">Ultimo backup</div>
+    <div class="kpi-value">{{ runs[0].reported_at if runs else '—' }}</div>
+  </div>
+  <div class="card">
+    <div class="kpi-label">Dimensione</div>
+    <div class="kpi-value">{{ '%.1f GB' % runs[0].size_gb if runs and runs[0].size_gb else '—' }}</div>
+  </div>
+  <div class="card">
+    <div class="kpi-label">Durata</div>
+    <div class="kpi-value">{{ runs[0].duration_s ~ 's' if runs and runs[0].duration_s else '—' }}</div>
+  </div>
+  <div class="card">
+    <div class="kpi-label">Disco VPS</div>
+    <div class="kpi-value">{{ server | disk_bar | safe }}</div>
+  </div>
+  <div class="card">
+    <div class="kpi-label">Restore test</div>
+    <div class="kpi-value">{{ runs[0] | restore_badge | safe if runs else '—' }}</div>
+  </div>
+</div>
+
+{% if server.folders %}
+<h3>Cartelle backuppate</h3>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+  {% for folder in server.folders | fromjson %}
+  <div class="card" style="display:flex;align-items:center;gap:10px;padding:8px 14px">
+    <span class="monospace">📁 {{ folder }}</span>
+    {% if runs and runs[0].snapshot_id %}
+    <a href="/api/v1/servers/{{ server.vps_id }}/snapshots/{{ runs[0].snapshot_id }}/download/{{ folder[1:] }}" class="btn btn-primary btn-sm">⬇ .tar.gz</a>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<h3>Storico backup</h3>
+<table class="table">
+  <thead>
+    <tr><th>Data</th><th>Stato</th><th>Dim.</th><th>Durata</th><th>Downtime</th><th>Restore</th><th>Download</th></tr>
+  </thead>
+  <tbody>
+  {% for r in runs %}
+  <tr>
+    <td>{{ r.reported_at }}</td>
+    <td>{{ r | status_badge | safe }}</td>
+    <td>{{ '%.1f GB' % r.size_gb if r.size_gb else '—' }}</td>
+    <td>{{ r.duration_s ~ 's' if r.duration_s else '—' }}</td>
+    <td>{{ r.downtime_s ~ 's' if r.downtime_s else '—' }}</td>
+    <td>{{ r | restore_badge | safe }}</td>
+    <td>
+      {% if r.snapshot_id %}
+      <a href="/api/v1/servers/{{ server.vps_id }}/snapshots/{{ r.snapshot_id }}/download" class="btn btn-primary btn-sm">⬇ Tutto</a>
+      {% else %}—{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

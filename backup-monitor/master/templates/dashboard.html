@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Backup Monitor{% endblock %}
+{% block content %}
+<div class="filter-bar">
+  <input type="text" id="search" placeholder="Cerca server, cliente..." oninput="filterTable()">
+  <select id="filterStatus" onchange="filterTable()">
+    <option value="">Tutti gli stati</option>
+    <option value="ok">✅ OK</option>
+    <option value="failed">❌ FAILED</option>
+    <option value="stale">⚠️ STALE</option>
+  </select>
+</div>
+<table class="table" id="serverTable">
+  <thead>
+    <tr>
+      <th>Server</th><th>Cliente</th><th>OS</th><th>Stato</th>
+      <th>Ultimo Backup</th><th>Dimensione</th><th>Disco VPS</th>
+      <th>Restore Test</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for s in servers %}
+    <tr data-status="{{ s.last_backup_status or 'stale' }}">
+      <td><span class="monospace">{{ s.vps_id }}</span></td>
+      <td>{{ s.cliente }}</td>
+      <td>{{ s | os_badge | safe }}</td>
+      <td>{{ s | status_badge | safe }}</td>
+      <td>{{ s.last_backup_at or '—' }}</td>
+      <td>{{ '%.1f GB' % s.size_gb if s.size_gb else '—' }}</td>
+      <td>{{ s | disk_bar | safe }}</td>
+      <td>{{ s | restore_badge | safe }}</td>
+      <td><a href="/servers/{{ s.vps_id }}" class="btn btn-secondary btn-sm">→</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<script>
+function filterTable() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const st = document.getElementById('filterStatus').value;
+  document.querySelectorAll('#serverTable tbody tr').forEach(row => {
+    const text = row.textContent.toLowerCase();
+    const status = row.dataset.status;
+    row.style.display = (text.includes(q) && (!st || status === st)) ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}
