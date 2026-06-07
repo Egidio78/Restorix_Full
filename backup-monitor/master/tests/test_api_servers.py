@@ -94,3 +94,25 @@ def test_update_server_unauthorized(client):
         json={"folders":["/home/Nativo"]},
         headers={"x-api-key": "wrongkey"})
     assert r.status_code == 401
+
+def test_get_server_config(client):
+    # Register a server
+    client.post("/api/v1/servers/register",
+        json={"vps_id":"vps-001","hostname":"h1","folders":["/home/Nativo","/home/Nativo_1"]},
+        headers={"x-api-key": _reg_key()})
+    # Get config with VPS api key
+    import hashlib, config
+    vps_key = hashlib.sha256(f"{config.MASTER_SECRET}vps-001".encode()).hexdigest()
+    r = client.get("/api/v1/servers/vps-001/config", headers={"x-api-key": vps_key})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["vps_id"] == "vps-001"
+    assert "/home/Nativo" in data["folders"]
+    assert data["backup_hour"] == 2
+
+def test_get_server_config_unauthorized(client):
+    client.post("/api/v1/servers/register",
+        json={"vps_id":"vps-001","hostname":"h1"},
+        headers={"x-api-key": _reg_key()})
+    r = client.get("/api/v1/servers/vps-001/config", headers={"x-api-key": "wrongkey"})
+    assert r.status_code == 401

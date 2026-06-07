@@ -10,6 +10,38 @@ HOSTNAME="{{ hostname }}"
 
 echo "$LOG_PREFIX Avvio backup $VPS_ID"
 
+# Fetch updated folders from Master (may have been edited from web UI)
+export _MASTER_SECRET="{{ master_secret }}"
+_FETCH_RESULT=$(python3 - << 'PYEOF'
+import urllib.request, json, os, hashlib
+vps_id = os.environ.get('VPS_ID', '')
+master_url = os.environ.get('MASTER_URL', '')
+secret = os.environ.get('_MASTER_SECRET', '')
+if not (vps_id and master_url and secret):
+    exit(0)
+api_key = hashlib.sha256((secret + vps_id).encode()).hexdigest()
+req = urllib.request.Request(
+    master_url + '/api/v1/servers/' + vps_id + '/config',
+    headers={'X-Api-Key': api_key}
+)
+try:
+    resp = urllib.request.urlopen(req, timeout=10)
+    data = json.loads(resp.read())
+    folders = data.get('folders', [])
+    if folders:
+        print(' '.join(folders))
+except Exception:
+    pass
+PYEOF
+)
+if [ -n "$_FETCH_RESULT" ]; then
+    BACKUP_FOLDERS="$_FETCH_RESULT"
+    echo "$LOG_PREFIX Cartelle aggiornate dal Master: $BACKUP_FOLDERS"
+else
+    echo "$LOG_PREFIX Cartelle dalla config locale: $BACKUP_FOLDERS"
+fi
+unset _MASTER_SECRET
+
 # Stop TeamSystem
 STOP_TIME=$(date +%s)
 systemctl stop "$TEAMSYSTEM_SERVICE" 2>/dev/null || true

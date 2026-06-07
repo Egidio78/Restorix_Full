@@ -102,6 +102,20 @@ def update_server(vps_id: str, payload: UpdateServer, x_api_key: str = Header(..
             conn.execute(f"UPDATE servers SET {set_clause} WHERE vps_id=?",
                          list(updates.values()) + [vps_id])
 
+@router.get("/api/v1/servers/{vps_id}/config")
+def get_server_config(vps_id: str, x_api_key: str = Header(...)):
+    verify_api_key(vps_id, x_api_key)
+    with db.get_db() as conn:
+        server = conn.execute("SELECT * FROM servers WHERE vps_id=?", (vps_id,)).fetchone()
+    if not server:
+        raise HTTPException(status_code=404, detail="VPS non trovata")
+    return {
+        "vps_id": server["vps_id"],
+        "hostname": server["hostname"],
+        "folders": json.loads(server["folders"]) if server["folders"] else [],
+        "backup_hour": server["backup_hour"],
+    }
+
 @router.get("/api/v1/servers/{vps_id}/latest-snapshot")
 def latest_snapshot(vps_id: str, x_api_key: str = Header(...)):
     verify_api_key(vps_id, x_api_key)
