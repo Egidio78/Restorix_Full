@@ -73,7 +73,7 @@ install_python() {
     case "${OS_ID}" in
         ubuntu|debian)
             apt-get update -qq
-            apt-get install -y -qq python3 python3-venv python3-distutils python3-pip
+            apt-get install -y python3 python3-venv python3-full
             ;;
         centos|rhel|rocky|almalinux)
             yum install -y python3 python3-pip 2>/dev/null || dnf install -y python3 python3-pip
@@ -90,17 +90,11 @@ install_python() {
 
 install_python
 
-# Install pip if missing
-if ! "$PYTHON_CMD" -m pip --version &>/dev/null; then
-    info "Installing pip..."
-    PY_MINOR=$("$PYTHON_CMD" -c 'import sys; print(sys.version_info.minor)')
-    PY_MAJOR=$("$PYTHON_CMD" -c 'import sys; print(sys.version_info.major)')
-    if [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -le 9 ]; then
-        curl -sSL "https://bootstrap.pypa.io/pip/${PY_MAJOR}.${PY_MINOR}/get-pip.py" | "$PYTHON_CMD" -
-    else
-        curl -sSL https://bootstrap.pypa.io/get-pip.py | "$PYTHON_CMD" -
-    fi
-fi
+# NOTE: we do NOT install pip system-wide. The agent runs entirely inside a venv
+# (created below) which ships its own pip via ensurepip. On PEP 668 systems
+# (Ubuntu 23.04+/24.04 "externally-managed-environment") a system-wide pip install
+# is blocked anyway. We only ensure the venv module is available (apt), then the
+# venv provides a working, isolated pip.
 
 # Check sqlcmd (warn only)
 if ! command -v sqlcmd &>/dev/null; then
@@ -134,24 +128,28 @@ info "Creating directories..."
 mkdir -p "${INSTALL_DIR}" "${CONFIG_DIR}" "${LOG_DIR}"
 chown "${AGENT_USER}:${AGENT_USER}" "${LOG_DIR}"
 
-# Ensure venv module is available for the selected Python
+# Ensure the venv module (with ensurepip) is available for the selected Python.
+# On Ubuntu 24.04 the stdlib venv needs the pythonX.Y-venv apt package.
 if ! "$PYTHON_CMD" -c "import ensurepip" >/dev/null 2>&1; then
-    info "venv missing for ${PYTHON_CMD} — installing..."
+    info "venv module missing for ${PYTHON_CMD} — installing via apt..."
     if [ "${OS_ID}" = "ubuntu" ] || [ "${OS_ID}" = "debian" ]; then
         PY_MINOR=$("$PYTHON_CMD" -c "import sys; print('%d.%d' % sys.version_info[:2])")
-        apt-get install -y -qq "python${PY_MINOR}-venv" 2>/dev/null \
-            || apt-get install -y -qq python3-venv python3-full
+        apt-get update -qq || true
+        apt-get install -y "python${PY_MINOR}-venv" 2>/dev/null \
+            || apt-get install -y python3-venv python3-full \
+            || apt-get install -y python3-full
     fi
 fi
 
-# Create virtualenv
+# Create virtualenv (its pip is isolated — PEP 668 does not apply inside a venv)
 info "Creating Python virtual environment at ${INSTALL_DIR}..."
+rm -rf "${INSTALL_DIR}/venv"
 "$PYTHON_CMD" -m venv "${INSTALL_DIR}/venv"
-"${INSTALL_DIR}/venv/bin/pip" install --quiet --upgrade pip
+"${INSTALL_DIR}/venv/bin/python" -m pip install --quiet --upgrade pip
 
 # Install dependencies
 info "Installing agent dependencies..."
-"${INSTALL_DIR}/venv/bin/pip" install --quiet     requests     boto3     paramiko     cryptography
+"${INSTALL_DIR}/venv/bin/pip" install --quiet requests boto3 paramiko cryptography pymysql
 
 # Download and install agent package from platform
 info "Downloading agent package..."
